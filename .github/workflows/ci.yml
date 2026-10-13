@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Supersede an in-flight run when a branch is pushed again.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck + tests + packed-tarball smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x' # >=22.5.0 required: the stack uses the built-in node:sqlite
+          cache: npm
+
+      # `npm ci` needs the committed package-lock.json — this repo DOES track it (unlike the
+      # private apps monorepo, where it is gitignored). A single install covers both workspace
+      # packages and symlinks @p2p-trust-stack/* into the root node_modules.
+      - name: Install
+        run: npm ci
+
+      # typecheck (builds both packages, then 2x tsc --noEmit)
+      #   -> both test suites
+      #   -> npm-pack smoke test (shipped assets, exports map, runMigrations with no explicit path)
+      - name: Verify
+        run: npm run verify

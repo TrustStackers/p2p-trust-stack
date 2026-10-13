@@ -1,0 +1,72 @@
+{
+  "name": "@p2p-trust-stack/app-api",
+  "version": "0.1.0",
+  "description": "P2P Trust Stack app API — the agent runtime, host seam, DTOs and domain interfaces that applications program against.",
+  "type": "module",
+  "license": "(GPL-3.0-only OR LicenseRef-Commercial)",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./*.js": {
+      "types": "./dist/*.d.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test 'test/*.test.ts' 'test/**/*.test.ts' 'test/**/**/*.test.ts'",
+    "test:agent": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/agent/agent.test.ts test/agent/chat-log.test.ts test/agent/peer-name.test.ts",
+    "test:trust_app_api": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test 'test/trust_app_api/*.test.ts'"
+  },
+  "keywords": [
+    "p2pts",
+    "p2p-trust-stack",
+    "libp2p",
+    "trust",
+    "agent"
+  ],
+  "dependencies": {
+    "@p2p-trust-stack/core": "^0.1.0",
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@libp2p/circuit-relay-v2": "^4.2.8",
+    "@libp2p/crypto": "^5.1.21",
+    "@libp2p/identify": "^4.1.9",
+    "@libp2p/peer-id": "^6.0.11",
+    "@libp2p/ping": "^3.1.8",
+    "@libp2p/tcp": "^11.0.23",
+    "@libp2p/websockets": "^10.1.16",
+    "@multiformats/multiaddr": "^13.0.3",
+    "libp2p": "^3.3.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.2"
+  }
+}

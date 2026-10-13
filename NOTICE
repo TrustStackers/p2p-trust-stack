@@ -1,0 +1,44 @@
+P2P Trust Stack — @truststackers/core
+Copyright (C) 2026 Trust Stackers
+
+Dual licensing
+---------------
+This product is dual-licensed. You may use, copy, modify, and distribute it
+under the terms of the GNU General Public License, version 3.0 (GPL-3.0), a
+copy of which is included in the LICENSE file.
+
+Alternatively, a separate commercial license is available from Trust Stackers
+for use cases where GPL-3.0 obligations (copyleft, source disclosure) are not
+acceptable. Contact licensing@truststackers.example (TODO: real address) or see
+COMMERCIAL-LICENSE-OUTLINE.md for the terms outline.
+
+No trademark grant
+------------------
+Nothing in this project grants any right to use the "Trust Stackers" name,
+logo, or the "P2P Trust Stack" mark. Trademark use requires a separate
+written agreement.
+
+Third-party notices
+-------------------
+This product includes software developed by third parties under permissive
+licenses (MIT and/or Apache-2.0). Full texts are available in the respective
+packages; the SPDX identifiers are listed below:
+
+- @hpke/core, @hpke/dhkem-x25519, @hpke/chacha20poly1305 — MIT
+- @noble/curves, @noble/hashes — MIT
+- @node-rs/argon2 — MIT
+- cesr — MIT
+- uuid — MIT
+- multiformats, @multiformats/multiaddr — MIT OR Apache-2.0
+- @libp2p/peer-id, @libp2p/utils, @libp2p/interface — Apache-2.0
+- libp2p — Apache-2.0
+
+Apache-2.0 components:
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use these files except in compliance with the License.
+  You may obtain a copy of the License at
+  http://www.apache.org/licenses/LICENSE-2.0
+
+All third-party components are permissively licensed and compatible with
+GPL-3.0. No copyleft-licensed third-party code may be added to this project
+(see CONTRIBUTING.md, "Dependency policy").

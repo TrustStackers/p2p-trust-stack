@@ -1,0 +1,89 @@
+{
+  "name": "@p2p-trust-stack/core",
+  "version": "0.1.0",
+  "description": "P2P Trust Stack core — libp2p-based Trust Spanning Protocol (TSP), decentralized DID creation/rotation, an encrypted SQLite keystore, relationships/OOBI, Verified Trust Communities (VTCs) and verifiable credentials.",
+  "type": "module",
+  "license": "(GPL-3.0-only OR LicenseRef-Commercial)",
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "files": [
+    "dist",
+    "src",
+    "migrations",
+    "SCHEMA_VERSION",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    "./*.js": {
+      "types": "./dist/*.d.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test 'test/*.test.ts' 'test/**/*.test.ts' 'test/**/**/*.test.ts'",
+    "test:transport": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/transport/libp2p-transport.test.ts test/transport/libp2p-transport-lifecycle.test.ts test/transport/relay-health.test.ts",
+    "test:relay-health": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/transport/relay-health.test.ts",
+    "test:crypto": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/crypto/primitives.test.ts test/crypto/cesr.test.ts test/crypto/cesr-v2.test.ts test/crypto/pqc.test.ts test/crypto/hpke-hybrid.test.ts test/crypto/ml-kem-x25519.test.ts",
+    "test:did": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/did/numalgo4.test.ts test/did/create-resolve.test.ts test/did/rotation-pqc.test.ts test/did/pqc-provisioning.test.ts test/did/did-method.test.ts test/did/rotation-codec.test.ts test/did/witness-attestation.test.ts test/did/rotation-log-store.test.ts",
+    "test:keystore": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/keystore/sqlite-keystore.test.ts",
+    "test:tsp": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/tsp/v3-message.test.ts test/tsp/v3-confidential.test.ts test/tsp/v3-mldsa.test.ts test/tsp/v3-golden.test.ts test/tsp/version.test.ts test/tsp/fields.test.ts",
+    "test:relationship": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/relationship/manager.test.ts test/relationship/handshake-verify.test.ts test/relationship/confidential-open.test.ts test/relationship/oobi-policy.test.ts test/relationship/vtc-invite.test.ts test/relationship/oobi.test.ts test/relationship/store.test.ts test/relationship/ceremony-ack-view.test.ts test/relationship/self-connect.test.ts",
+    "test:e2e": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/relationship/e2e-direct-mode.test.ts test/relationship/e2e-large-payload.test.ts",
+    "test:ceremony-store": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/relationship/ceremony-store.test.ts",
+    "test:vtc": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/vtc/codec.test.ts test/vtc/vtc.test.ts test/vtc/store.test.ts test/vtc/encoded-vid-guard.test.ts",
+    "test:rotation": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/did/rotation-codec.test.ts test/did/witness-attestation.test.ts test/did/rotation-log-store.test.ts"
+  },
+  "keywords": [
+    "p2pts",
+    "p2p-trust-stack",
+    "libp2p",
+    "trust",
+    "did",
+    "tsp",
+    "verifiable-credentials",
+    "vtc"
+  ],
+  "dependencies": {
+    "@hpke/chacha20poly1305": "^1.8.0",
+    "@hpke/common": "^1.10.1",
+    "@hpke/core": "^1.9.0",
+    "@hpke/dhkem-x25519": "^1.8.0",
+    "@libp2p/circuit-relay-v2": "^4.2.8",
+    "@libp2p/peer-id": "^6.0.11",
+    "@libp2p/utils": "^7.2.3",
+    "@multiformats/multiaddr": "^13.0.3",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@noble/post-quantum": "^0.7.1",
+    "@node-rs/argon2": "^2.0.2",
+    "canonicalize": "^5.1.0",
+    "cesr": "^0.1.2",
+    "multiformats": "^14.0.3",
+    "uuid": "^14.0.1"
+  },
+  "peerDependencies": {
+    "@libp2p/interface": "^3.2.4",
+    "libp2p": "^3.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.2"
+  }
+}

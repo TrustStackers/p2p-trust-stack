@@ -1,0 +1,35 @@
+{
+  "name": "p2p-trust-stack",
+  "version": "0.1.0",
+  "description": "P2P Trust Stack — a libp2p-based Trust Spanning Protocol (TSP) stack: decentralized DID creation and rotation, an encrypted SQLite keystore, relationships/OOBI, Verified Trust Communities and verifiable credentials.",
+  "private": true,
+  "type": "module",
+  "license": "(GPL-3.0-only OR LicenseRef-Commercial)",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @p2p-trust-stack/core && npm run build --workspace @p2p-trust-stack/app-api",
+    "typecheck": "npm run build && npm run typecheck --workspace @p2p-trust-stack/core && npm run typecheck --workspace @p2p-trust-stack/app-api",
+    "test": "npm run test --workspace @p2p-trust-stack/core && npm run test --workspace @p2p-trust-stack/app-api",
+    "smoke:pack": "node scripts/smoke-pack.mjs",
+    "verify": "npm run typecheck && npm run test && npm run smoke:pack"
+  },
+  "keywords": [
+    "p2pts",
+    "p2p-trust-stack",
+    "libp2p",
+    "trust",
+    "did",
+    "tsp",
+    "verifiable-credentials",
+    "vtc"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "typescript": "^5.7.2"
+  }
+}
