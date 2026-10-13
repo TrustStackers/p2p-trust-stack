@@ -17,5 +17,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial public release of the protocol stack (`crypto`, `did`, `keystore`,
   `tsp`, `transport`, `relationship`, `vtc`, `tx`).
 
-[Unreleased]: https://github.com/p2p-trust-stack/p2p-trust-stack/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/p2p-trust-stack/p2p-trust-stack/releases/tag/v0.1.0
+[Unreleased]: https://github.com/TrustStackers/p2p-trust-stack/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/TrustStackers/p2p-trust-stack/releases/tag/v0.1.0
