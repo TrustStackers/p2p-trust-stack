@@ -1,4 +1,4 @@
-P2P Trust Stack — @truststackers/core
+P2P Trust Stack — @p2p-trust-stack/core and @p2p-trust-stack/app-api
 Copyright (C) 2026 Trust Stackers
 
 Dual licensing
@@ -24,13 +24,17 @@ This product includes software developed by third parties under permissive
 licenses (MIT and/or Apache-2.0). Full texts are available in the respective
 packages; the SPDX identifiers are listed below:
 
-- @hpke/core, @hpke/dhkem-x25519, @hpke/chacha20poly1305 — MIT
-- @noble/curves, @noble/hashes — MIT
+- @hpke/core, @hpke/common, @hpke/dhkem-x25519, @hpke/chacha20poly1305 — MIT
+- @noble/curves, @noble/hashes, @noble/post-quantum — MIT
 - @node-rs/argon2 — MIT
+- canonicalize — MIT
 - cesr — MIT
 - uuid — MIT
 - multiformats, @multiformats/multiaddr — MIT OR Apache-2.0
-- @libp2p/peer-id, @libp2p/utils, @libp2p/interface — Apache-2.0
+- @libp2p/peer-id, @libp2p/utils, @libp2p/interface, @libp2p/circuit-relay-v2,
+  @libp2p/crypto, @libp2p/identify, @libp2p/ping, @libp2p/tcp,
+  @libp2p/websockets — Apache-2.0
+- @chainsafe/libp2p-noise, @chainsafe/libp2p-yamux — Apache-2.0
 - libp2p — Apache-2.0
 
 Apache-2.0 components:

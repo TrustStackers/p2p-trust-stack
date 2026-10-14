@@ -3,7 +3,7 @@
 This Contributor License Agreement ("Agreement") is a draft for legal review.
 **Do not treat this text as final until reviewed by counsel.**
 
-Thank you for your interest in contributing to **@p2p-trust-stack/core** (the
+Thank you for your interest in contributing to **P2P Trust Stack** (the
 "Project"), operated by Trust Stackers ("we", "us", "our"). To clarify the
 intellectual property rights granted with contributions, we require that all
 contributors accept this Agreement. This is for the protection of you and the

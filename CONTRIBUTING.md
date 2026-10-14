@@ -1,7 +1,12 @@
-# Contributing to @p2p-trust-stack/core
+# Contributing to the P2P Trust Stack
 
 Thank you for your interest in contributing! This document covers local
 development, the contribution workflow, and the project's hard rules.
+
+The repository is a monorepo of two published packages —
+[`@p2p-trust-stack/core`](./packages/core) (the protocol engine) and
+[`@p2p-trust-stack/app-api`](./packages/app-api) (the application-facing agent
+API, which depends on `core`).
 
 ## Before you start: sign the CLA
 
@@ -25,9 +30,10 @@ the project's own code. Therefore:
 
 ```bash
 # Prereqs: Node.js >= 22.5, npm
-npm install
-npm run build        # tsc -> dist/
-npm test             # node test runner over test/**
+npm install          # installs both workspaces
+npm run build        # tsc -> dist/ for both packages
+npm test             # both test suites
+npm run verify       # typecheck + test + packed-tarball smoke test
 ```
 
 ## Workflow

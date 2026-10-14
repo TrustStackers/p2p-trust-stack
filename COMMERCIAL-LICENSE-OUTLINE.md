@@ -5,7 +5,7 @@
 > binding agreement.
 
 This outlines the commercial license offered as an alternative to the
-[GPL-3.0](./LICENSE) license for `@p2p-trust-stack/core`.
+[GPL-3.0](./LICENSE) license for the packages in this repository (`@p2p-trust-stack/core` and `@p2p-trust-stack/app-api`).
 
 ## What the commercial license covers
 
