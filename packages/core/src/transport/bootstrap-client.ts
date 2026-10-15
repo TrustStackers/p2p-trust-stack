@@ -28,25 +28,18 @@ import { RELAY_V2_HOP_CODEC } from '@libp2p/circuit-relay-v2';
 import type { Libp2p, Connection, Stream } from '@libp2p/interface';
 import { hasRelayReservation as nodeHasRelayReservation } from './relay-health.js';
 import { reconnectAdvertiseAddrs } from './port-range.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
-// Bootstrap server protocol constants
+// Bootstrap protocol constants
 // ---------------------------------------------------------------------------
-
-/**
- * The bootstrap server's fixed peer ID (derived from a seeded Ed25519 key pair).
- */
-const BOOTSTRAP_SERVER_PEER_ID = '12D3KooWKF2Tmh21NNSH5gWazfbmFEtTZS9XT1uXk8njFAy5jUda';
-
-/**
- * Full multiaddr for the bootstrap server over TCP.
- */
-const BOOTSTRAP_SERVER_URL = `/dns/mediator.fpndtg.com/tcp/4001/p2p/${BOOTSTRAP_SERVER_PEER_ID}`;
-
-/**
- * Full multiaddr for the bootstrap server over WebSockets (fallback).
- */
-const BOOTSTRAP_SERVER_WS_URL = `/dns/mediator.fpndtg.com/tcp/4002/ws/p2p/${BOOTSTRAP_SERVER_PEER_ID}`;
+//
+// NOTE: the bootstrap server's ADDRESS and PEER ID are deliberately NOT
+// constants in this file. They are loaded from the component's `.env` through
+// `src/config/bootstrap-env.ts` (written by `npm run init:bootstrap`) and passed
+// to the constructor by the caller. This removes the hardcoded
+// `mediator.fpndtg.com` address and the `process.env.BOOTSTRAP_SERVER_URL`
+// override that used to live here.
 
 /** The bootstrap protocol identifier. */
 const BOOTSTRAP_PROTOCOL = '/bootstrap/2.0.0';
@@ -311,13 +304,19 @@ export class BootstrapClient {
    * @param options - Optional reconnect configuration.
    */
   constructor(bootstrapUrl?: string, wsFallbackUrl?: string, options?: BootstrapReconnectOptions) {
-    // The default bootstrap can be overridden by environment so a local or
-    // self-hosted bootstrap can be targeted without a code change (e.g. running
-    // the test suite against your own bootstrap):
-    //   BOOTSTRAP_SERVER_URL     — primary multiaddr (TCP)
-    //   BOOTSTRAP_SERVER_WS_URL  — WebSocket fallback multiaddr
-    this.bootstrapUrl = bootstrapUrl || process.env.BOOTSTRAP_SERVER_URL || BOOTSTRAP_SERVER_URL;
-    this.wsFallbackUrl = wsFallbackUrl || process.env.BOOTSTRAP_SERVER_WS_URL || BOOTSTRAP_SERVER_WS_URL;
+    // The address is REQUIRED and comes from the caller — typically
+    // `buildBootstrapUrls(loadBootstrapEnv())` from `src/config/bootstrap-env.ts`.
+    // There is deliberately no default: a hardcoded address (or a `process.env`
+    // fallback) is exactly what this refactor removed. The WS fallback is
+    // optional — when omitted, dialing is TCP-only.
+    if (!bootstrapUrl) {
+      throw new Error(
+        'BootstrapClient: no bootstrap URL supplied. Load it with `loadBootstrapEnv()` ' +
+        'from src/config/bootstrap-env.ts (run `npm run init:bootstrap` to create the .env).',
+      );
+    }
+    this.bootstrapUrl = bootstrapUrl;
+    this.wsFallbackUrl = wsFallbackUrl ?? '';
 
     if (options) {
       if (options.maxKeepaliveFailures != null) this.maxKeepaliveFailures = options.maxKeepaliveFailures;
@@ -444,6 +443,9 @@ export class BootstrapClient {
     try {
       return await this.dialAndSend(node, this.bootstrapUrl, payload);
     } catch (tcpErr) {
+      // No WebSocket fallback configured — surface the TCP error directly
+      // rather than dialing an empty address.
+      if (!this.wsFallbackUrl) throw tcpErr;
       // TCP failed, try WebSocket fallback
       try {
         return await this.dialAndSend(node, this.wsFallbackUrl, payload);
@@ -669,7 +671,7 @@ export class BootstrapClient {
     // previously discarded entirely (the old loop swallowed it in a bare
     // `catch {}`), leaving an operator with nothing to diagnose.
     if (this.keepaliveFailures === 1) {
-      console.warn(`[bootstrap-client] keepalive probe failed: ${reason}`);
+      logger.warn(`[bootstrap-client] keepalive probe failed: ${reason}`);
     }
 
     if (this.reconnectState === 'connected' && this.keepaliveFailures >= this.maxKeepaliveFailures) {

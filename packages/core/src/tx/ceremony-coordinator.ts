@@ -16,6 +16,7 @@ import { CeremonyStore } from './ceremony-store.js';
 import { GovernanceGuard } from '../services/governance-guard.js';
 import type { DataSource } from '../db/data-source.js';
 import type { TransactionManager } from './manager.js';
+import { logger } from '../util/logger.js';
 
 const DEFAULT_PROPOSAL_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -73,7 +74,7 @@ export class CeremonyCoordinator {
       parentCommunityDid: input.parentCommunityDid ?? null,
     });
 
-    console.log(`[ceremony] proposal ${proposalId.slice(0, 8)}: ${input.name} (${input.kind}, threshold=${input.threshold})`);
+    logger.info(`[ceremony] proposal ${proposalId.slice(0, 8)}: ${input.name} (${input.kind}, threshold=${input.threshold})`);
     return proposalId;
   }
 
@@ -160,7 +161,7 @@ export class CeremonyCoordinator {
     });
 
     await this.store.updateStatus(proposalId, 'crystallized', Date.now());
-    console.log(`[ceremony] ${proposalId.slice(0, 8)}: crystallized → VTC created`);
+    logger.info(`[ceremony] ${proposalId.slice(0, 8)}: crystallized → VTC created`);
   }
 
   // ═══════════════════════════════════════════════════════════════

@@ -24,6 +24,7 @@ import type {
 } from './types.js';
 import { TransactionCoordinator } from './coordinator.js';
 import { CompensationExecutor } from './compensation.js';
+import { logger } from '../util/logger.js';
 
 export interface TransactionOptions {
   coordinator: TransactionCoordinator;
@@ -129,20 +130,20 @@ export class Transaction {
       ([pid, ops]) => ({ pid, operations: ops }),
     );
 
-    console.log(`[tx] committing with ${participants.length} participant(s)`);
+    logger.info(`[tx] committing with ${participants.length} participant(s)`);
     const result = await this.coordinator.execute({ participants });
 
     // If the coordinator aborted (a participant voted NO or prepare failed),
     // roll back application variables too — database/participant effects are
     // already rolled back by the coordinator's abort fan-out.
     if (result.outcome === 'aborted') {
-      console.log(`[tx] aborted — running ${this.undos.length} app undo(s)`);
+      logger.info(`[tx] aborted — running ${this.undos.length} app undo(s)`);
       await this.runAppUndos();
     }
 
     this.result = result;
     this.finished = true;
-    console.log(`[tx] finished: ${result.outcome} (txId=${result.txId.slice(0, 8)})`);
+    logger.info(`[tx] finished: ${result.outcome} (txId=${result.txId.slice(0, 8)})`);
     return result;
   }
 
@@ -156,7 +157,7 @@ export class Transaction {
       return this.result ?? { txId: '<finished>', outcome: 'aborted' };
     }
 
-    console.log(`[tx] aborting — running ${this.undos.length} app undo(s)`);
+    logger.info(`[tx] aborting — running ${this.undos.length} app undo(s)`);
     await this.runAppUndos();
 
     // Abort any child that is still open.
@@ -175,7 +176,7 @@ export class Transaction {
     if (this.undos.length === 0) return;
     const errors = await this.compensation.execute(this.undos);
     if (errors.length > 0) {
-      console.warn(`[tx] compensation errors for transaction: ${errors.join('; ')}`);
+      logger.warn(`[tx] compensation errors for transaction: ${errors.join('; ')}`);
     }
     this.undos.length = 0;
   }

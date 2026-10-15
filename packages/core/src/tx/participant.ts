@@ -30,6 +30,7 @@ import type {
 import type {
   TxWireMessage,
 } from './wire-protocol.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // InProcessParticipant (local DB + app-variable operations)
@@ -83,7 +84,7 @@ export class InProcessParticipant implements Participant {
       JSON.stringify(undos),
     );
 
-    console.log(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} prepared (${operations.length} op(s), ${undos.length} undo(s))`);
+    logger.info(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} prepared (${operations.length} op(s), ${undos.length} undo(s))`);
     return 'yes';
   }
 
@@ -96,7 +97,7 @@ export class InProcessParticipant implements Participant {
       txId,
       this.pid,
     );
-    console.log(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} committed`);
+    logger.info(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} committed`);
   }
 
   async abort(txId: string): Promise<void> {
@@ -110,7 +111,7 @@ export class InProcessParticipant implements Participant {
       txId,
       this.pid,
     );
-    console.log(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} aborted`);
+    logger.info(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} aborted`);
   }
 
   async compensate(txId: string): Promise<void> {
@@ -123,7 +124,7 @@ export class InProcessParticipant implements Participant {
     );
     if (!row || row.outcome !== 'committed') return;
 
-    console.log(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} compensating (was committed)`);
+    logger.info(`[tx-participant] ${this.pid} ${txId.slice(0, 8)} compensating (was committed)`);
     const undos: UndoDescriptor[] = row.undo_hooks ? JSON.parse(row.undo_hooks) : [];
     await this.rollbackLocal(undos);
 
@@ -201,7 +202,7 @@ export class RemoteParticipant implements Participant {
   }
 
   async prepare(txId: string, operations: Operation[]): Promise<Vote> {
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending prepare (${operations.length} op(s))`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending prepare (${operations.length} op(s))`);
     const res = await this.transport.send(this.pid, {
       kind: 'tx_prepare',
       txId,
@@ -209,30 +210,30 @@ export class RemoteParticipant implements Participant {
       messageId: randomUUID(),
     });
     if (res.kind !== 'tx_prepare_result') throw new Error('bad prepare response');
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} prepare result: ${res.vote}`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} prepare result: ${res.vote}`);
     return res.vote;
   }
 
   async commit(txId: string): Promise<void> {
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending commit`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending commit`);
     await this.transport.send(this.pid, { kind: 'tx_commit', txId, messageId: randomUUID() });
   }
 
   async abort(txId: string): Promise<void> {
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending abort`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending abort`);
     await this.transport.send(this.pid, { kind: 'tx_abort', txId, messageId: randomUUID() });
   }
 
   async compensate(txId: string): Promise<void> {
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending compensate (abort)`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending compensate (abort)`);
     await this.transport.send(this.pid, { kind: 'tx_abort', txId, messageId: randomUUID() });
   }
 
   async inquiry(txId: string): Promise<Outcome> {
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending inquiry`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} sending inquiry`);
     const res = await this.transport.send(this.pid, { kind: 'tx_inquiry', txId, messageId: randomUUID() });
     if (res.kind !== 'tx_inquiry_result') throw new Error('bad inquiry response');
-    console.log(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} inquiry result: ${res.outcome}`);
+    logger.info(`[tx-remote] ${this.pid} ${txId.slice(0, 8)} inquiry result: ${res.outcome}`);
     return res.outcome;
   }
 
@@ -245,7 +246,7 @@ export class RemoteParticipant implements Participant {
    * a direct request/response path.
    */
   async query(op: string, params?: Record<string, unknown>): Promise<unknown> {
-    console.log(`[tx-remote] ${this.pid} sending query ${op}`);
+    logger.info(`[tx-remote] ${this.pid} sending query ${op}`);
     const res = await this.transport.send(this.pid, {
       kind: 'tx_query',
       txId: randomUUID(),

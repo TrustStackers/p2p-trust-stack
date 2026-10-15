@@ -27,6 +27,7 @@
 import type { PolicyEngine, UnknownFactPolicy } from './policy-engine.js';
 import { UNKNOWN_FACT_POLICIES } from './policy-engine.js';
 import { LocalPolicyEngine } from './local-policy-engine.js';
+import { logger } from '../util/logger.js';
 
 /** Selects the policy engine implementation. */
 export const POLICY_ENGINE_ENV = 'TSP_POLICY_ENGINE';
@@ -74,7 +75,7 @@ export function resolvePolicyEngineConfig(
   if ((POLICY_ENGINES as readonly string[]).includes(rawEngine)) {
     engine = rawEngine as PolicyEngineKind;
   } else if (rawEngine.length > 0) {
-    console.warn(
+    logger.warn(
       `[policy-engine] unrecognised ${POLICY_ENGINE_ENV}="${rawEngine}" — falling back to "${engine}"`,
     );
   }
@@ -84,7 +85,7 @@ export function resolvePolicyEngineConfig(
   if ((UNKNOWN_FACT_POLICIES as readonly string[]).includes(rawUnknownFact)) {
     unknownFact = rawUnknownFact as UnknownFactPolicy;
   } else if (rawUnknownFact.length > 0) {
-    console.warn(
+    logger.warn(
       `[policy-engine] unrecognised ${POLICY_UNKNOWN_FACT_ENV}="${rawUnknownFact}" — falling back to "${unknownFact}"`,
     );
   }

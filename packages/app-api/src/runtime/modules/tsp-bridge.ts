@@ -30,6 +30,7 @@
 import { encodeProtocolMessage, type ProtocolMessage } from '@p2p-trust-stack/core/tsp-handlers/types.js';
 import type { RelationshipManager } from '@p2p-trust-stack/core/relationship/manager.js';
 import type { TspClientModule } from './tsp-client.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 export interface TspBridgeDeps {
   /** Active relationship manager (has running transport + store). */
@@ -77,7 +78,7 @@ export class TspBridge {
       void this.manager?.invalidateConnection(remoteDid);
     });
 
-    console.log('[TspBridge] Initialized — TSP client wired through RelationshipManager');
+    logger.info('[TspBridge] Initialized — TSP client wired through RelationshipManager');
   }
 
   // ---------------------------------------------------------------------------
@@ -133,7 +134,7 @@ export class TspBridge {
       );
     }
 
-    console.log(
+    logger.info(
       `[TspBridge] Connecting to utility server via OOBI: vid=${oobi.cesrVid.slice(0, 12)}... peerId=${oobi.peerId.slice(0, 12)}... did=${(oobi.did ?? 'MISSING').slice(0, 24)}`,
     );
 
@@ -151,7 +152,7 @@ export class TspBridge {
         // TSP_GEN messages are sent to the correct peer.
         const storedPeerId = existing.remoteTransport?.peerId;
         if (storedPeerId && storedPeerId !== oobi.peerId) {
-          console.log(
+          logger.info(
             `[TspBridge] ⚠ utility server peer ID changed: stored=${storedPeerId.slice(0, 12)}... → current=${oobi.peerId.slice(0, 12)}... (server restarted?)`,
           );
           this.manager.updateTransport(oobi.did, {
@@ -311,14 +312,14 @@ export class TspBridge {
           const responseBody = encodeProtocolMessage(result);
           await this.manager.sendMessage(remoteDid, responseBody);
         } catch (err) {
-          console.error(
+          logger.error(
             `[TspBridge] Failed to send ${result.protocol} response to ${remoteDid.slice(0, 12)}...:`,
             (err as Error)?.message ?? err,
           );
         }
       }
     } else {
-      console.log(`[TspBridge] handleInbound: not a protocol message or no match`);
+      logger.info(`[TspBridge] handleInbound: not a protocol message or no match`);
     }
     return result !== null;
   }

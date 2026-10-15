@@ -31,6 +31,7 @@ import { SqliteKeyStore } from '@p2p-trust-stack/core/keystore/sqlite-keystore.j
 import { openDatabase } from '@p2p-trust-stack/core/db/connection.js';
 import { runMigrations } from '@p2p-trust-stack/core/db/migrate.js';
 import { getMigrationsDir } from '@p2p-trust-stack/core/db/migrations-dir.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -240,7 +241,7 @@ export class ContextManager {
     try {
       const applied = runMigrations(contextDb, __migrationsDir);
       if (applied.length > 0) {
-        console.log(
+        logger.info(
           `[ContextManager] Applied ${applied.length} migration(s) to context "${this.contextId}"`,
         );
       }
@@ -288,7 +289,7 @@ export class ContextManager {
     try {
       rmSync(this.contextDir, { recursive: true, force: true });
     } catch {
-      console.warn(`[ContextManager] Could not fully remove context directory: ${this.contextDir}`);
+      logger.warn(`[ContextManager] Could not fully remove context directory: ${this.contextDir}`);
     }
   }
 

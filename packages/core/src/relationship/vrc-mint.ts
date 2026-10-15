@@ -18,6 +18,7 @@ import { generateUuid } from '../db/uuid-helpers.js';
 import type { DataSource } from '../db/data-source.js';
 import type { IdentityResolver } from '../services/identity-resolver.js';
 import type { RelationshipRecord, LocalIdentity } from './types.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,14 +60,14 @@ export async function mintPeerVrc(params: {
   const { dataSource, resolver, identity, record } = params;
 
   if (!record.rfiDigest || !record.rfaReplyDigest) {
-    console.warn('[mintPeerVrc] Cannot mint VRC: missing rfiDigest or rfaReplyDigest.');
+    logger.warn('[mintPeerVrc] Cannot mint VRC: missing rfiDigest or rfaReplyDigest.');
     return { success: false };
   }
 
   const local = resolver.lookupByDid(identity.did);
   const remote = resolver.lookupByDid(record.remoteDid);
   if (!local || !remote) {
-    console.warn('[mintPeerVrc] Cannot mint VRC: identity not resolved for local or remote.');
+    logger.warn('[mintPeerVrc] Cannot mint VRC: identity not resolved for local or remote.');
     return { success: false };
   }
 
@@ -104,7 +105,7 @@ export async function mintPeerVrc(params: {
     local.identityUuid, remote.identityUuid,
   );
   if (existing) {
-    console.log(`[mintPeerVrc] VRC already exists for ${record.remoteDid.slice(0, 12)}... (uuid=${existing.uuid})`);
+    logger.info(`[mintPeerVrc] VRC already exists for ${record.remoteDid.slice(0, 12)}... (uuid=${existing.uuid})`);
     return { success: true, remoteDid: record.remoteDid };
   }
 
@@ -139,9 +140,9 @@ export async function mintPeerVrc(params: {
     w3cJson = mintResult.w3cVcJson;
 
     await dataSource.run('UPDATE credentials SET credential_digest = ? WHERE uuid = ?', digestHex, credentialUuid);
-    console.log(`[mintPeerVrc] DTG RelationshipCredential stored for ${record.remoteDid.slice(0, 12)}...`);
+    logger.info(`[mintPeerVrc] DTG RelationshipCredential stored for ${record.remoteDid.slice(0, 12)}...`);
   } catch (err) {
-    console.warn('[mintPeerVrc] Failed to mint via factory (non-fatal):', (err as Error)?.message ?? err);
+    logger.warn('[mintPeerVrc] Failed to mint via factory (non-fatal):', (err as Error)?.message ?? err);
     return { success: false };
   }
 
@@ -157,7 +158,7 @@ export async function mintPeerVrc(params: {
     credRow?.uuid ?? '', local.identityUuid,
     didDocRow?.uuid ?? null, signature, sigUuid, sigNow);
 
-  console.log(`[mintPeerVrc] Stored relationship handshake record for remote ${record.remoteDid.slice(0, 12)}... (credential_uuid=${credentialUuid})`);
+  logger.info(`[mintPeerVrc] Stored relationship handshake record for remote ${record.remoteDid.slice(0, 12)}... (credential_uuid=${credentialUuid})`);
   return { success: true, w3cVcJson: w3cJson ?? undefined, remoteDid: record.remoteDid };
 }
 

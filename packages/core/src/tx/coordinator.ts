@@ -30,6 +30,7 @@ import type {
   StatusEvent,
   TransactionResult,
 } from './types.js';
+import { logger } from '../util/logger.js';
 
 export type StatusListener = (event: StatusEvent) => void;
 
@@ -151,11 +152,11 @@ export class TransactionCoordinator {
     await this.log.append(txId, 'TX_STARTED', {
       pids: options.participants.map((e) => e.pid),
     });
-    console.log(`[tx-coordinator] ${txId.slice(0, 8)} started with ${options.participants.length} participant(s): ${options.participants.map(e => e.pid).join(', ')}`);
+    logger.info(`[tx-coordinator] ${txId.slice(0, 8)} started with ${options.participants.length} participant(s): ${options.participants.map(e => e.pid).join(', ')}`);
     this.emit({ txId, state: 'preparing' });
 
     const decision = await this.prepareAndDecide(txId, options);
-    console.log(`[tx-coordinator] ${txId.slice(0, 8)} decision: ${decision}`);
+    logger.info(`[tx-coordinator] ${txId.slice(0, 8)} decision: ${decision}`);
     this.emit({ txId, state: decision });
 
     if (decision === 'committed') {
@@ -165,7 +166,7 @@ export class TransactionCoordinator {
     }
 
     await this.log.append(txId, 'DONE');
-    console.log(`[tx-coordinator] ${txId.slice(0, 8)} done (${decision})`);
+    logger.info(`[tx-coordinator] ${txId.slice(0, 8)} done (${decision})`);
     this.emit({ txId, state: 'done' });
 
     const result: TransactionResult = { txId, outcome: decision };
@@ -175,7 +176,7 @@ export class TransactionCoordinator {
 
   /** Crash-safe re-drive of interrupted transactions. */
   async recover(): Promise<TransactionResult[]> {
-    console.log('[tx-coordinator] starting recovery...');
+    logger.info('[tx-coordinator] starting recovery...');
     const recovered: TransactionResult[] = [];
     for (const txId of await this.log.txIds()) {
       const entries = await this.log.read(txId);
@@ -216,7 +217,7 @@ export class TransactionCoordinator {
       await this.log.append(txId, 'DONE');
       recovered.push({ txId, outcome: allPrepared ? 'committed' : 'aborted' });
     }
-    console.log(`[tx-coordinator] recovery complete: ${recovered.length} transaction(s) recovered`);
+    logger.info(`[tx-coordinator] recovery complete: ${recovered.length} transaction(s) recovered`);
     return recovered;
   }
 
@@ -236,17 +237,17 @@ export class TransactionCoordinator {
     for (const { pid, operations } of options.participants) {
       const p = this.getParticipantForPid(pid, operations);
       if (!p) {
-        console.log(`[tx-coordinator] ${txId.slice(0, 8)} participant not found for ${pid} (${operations.length} op(s))`);
+        logger.info(`[tx-coordinator] ${txId.slice(0, 8)} participant not found for ${pid} (${operations.length} op(s))`);
         votes.set(pid, 'no');
         continue;
       }
       try {
-        console.log(`[tx-coordinator] ${txId.slice(0, 8)} preparing ${pid} (${operations.length} op(s))`);
+        logger.info(`[tx-coordinator] ${txId.slice(0, 8)} preparing ${pid} (${operations.length} op(s))`);
         const vote = await p.prepare(txId, operations);
-        console.log(`[tx-coordinator] ${txId.slice(0, 8)} ${pid} voted: ${vote}`);
+        logger.info(`[tx-coordinator] ${txId.slice(0, 8)} ${pid} voted: ${vote}`);
         votes.set(pid, vote);
       } catch (err) {
-        console.error(`[tx-coordinator] ${txId.slice(0, 8)} ${pid} prepare error:`, (err as Error)?.message);
+        logger.error(`[tx-coordinator] ${txId.slice(0, 8)} ${pid} prepare error:`, (err as Error)?.message);
         votes.set(pid, 'no');
       }
     }
@@ -271,14 +272,14 @@ export class TransactionCoordinator {
       if (!p) continue;
       try {
         if (phase === 'commit') {
-          console.log(`[tx-coordinator] ${txId.slice(0, 8)} committing ${pid}`);
+          logger.info(`[tx-coordinator] ${txId.slice(0, 8)} committing ${pid}`);
           await p.commit(txId);
         } else {
-          console.log(`[tx-coordinator] ${txId.slice(0, 8)} aborting ${pid}`);
+          logger.info(`[tx-coordinator] ${txId.slice(0, 8)} aborting ${pid}`);
           await p.abort(txId);
         }
       } catch (err) {
-        console.error(`[tx-coordinator] ${txId.slice(0, 8)} ${pid} ${phase} error:`, (err as Error)?.message);
+        logger.error(`[tx-coordinator] ${txId.slice(0, 8)} ${pid} ${phase} error:`, (err as Error)?.message);
         // idempotent retry on recovery
       }
     }
@@ -343,10 +344,10 @@ export class TransactionCoordinator {
     if (pid) {
       const resolved = this.getParticipantForPid(pid, []);
       if (resolved) {
-        console.log(`[tx-coordinator] ${txId.slice(0, 8)} recovered prepared pid '${pid}' from durable state`);
+        logger.info(`[tx-coordinator] ${txId.slice(0, 8)} recovered prepared pid '${pid}' from durable state`);
         return resolved;
       }
-      console.warn(
+      logger.warn(
         `[tx-coordinator] ${txId.slice(0, 8)} durable state says pid '${pid}' prepared, but it is not ` +
         `registered in this process — falling back to the first registered participant`,
       );
@@ -376,17 +377,17 @@ export class TransactionCoordinator {
       case 'tx_prepare': {
         const participant = this.findParticipantForOperations(msg.operations);
         if (!participant) {
-          console.log(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)}: no participant handles operations`);
+          logger.info(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)}: no participant handles operations`);
           return { kind: 'tx_prepare_result', txId, vote: 'no' };
         }
         try {
-          console.log(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)} → ${participant.pid}`);
+          logger.info(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)} → ${participant.pid}`);
           const vote = await participant.prepare(txId, msg.operations);
-          console.log(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)} ${participant.pid} voted: ${vote}`);
+          logger.info(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)} ${participant.pid} voted: ${vote}`);
           this.preparedBy.set(txId, participant);
           return { kind: 'tx_prepare_result', txId, vote };
         } catch (err) {
-          console.error(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
+          logger.error(`[tx-coordinator] inbound prepare ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
           return { kind: 'tx_prepare_result', txId, vote: 'no' };
         }
       }
@@ -395,11 +396,11 @@ export class TransactionCoordinator {
         const participant = await this.participantForPreparedTx(txId);
         if (!participant) return { kind: 'tx_commit_result', txId, ok: false };
         try {
-          console.log(`[tx-coordinator] inbound commit ${txId.slice(0, 8)} → ${participant.pid}`);
+          logger.info(`[tx-coordinator] inbound commit ${txId.slice(0, 8)} → ${participant.pid}`);
           await participant.commit(txId);
           return { kind: 'tx_commit_result', txId, ok: true };
         } catch (err) {
-          console.error(`[tx-coordinator] inbound commit ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
+          logger.error(`[tx-coordinator] inbound commit ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
           return { kind: 'tx_commit_result', txId, ok: false };
         }
       }
@@ -408,11 +409,11 @@ export class TransactionCoordinator {
         const participant = await this.participantForPreparedTx(txId);
         if (!participant) return { kind: 'tx_abort_result', txId, ok: false };
         try {
-          console.log(`[tx-coordinator] inbound abort ${txId.slice(0, 8)} → ${participant.pid}`);
+          logger.info(`[tx-coordinator] inbound abort ${txId.slice(0, 8)} → ${participant.pid}`);
           await participant.abort(txId);
           return { kind: 'tx_abort_result', txId, ok: true };
         } catch (err) {
-          console.error(`[tx-coordinator] inbound abort ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
+          logger.error(`[tx-coordinator] inbound abort ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
           return { kind: 'tx_abort_result', txId, ok: false };
         }
       }
@@ -424,7 +425,7 @@ export class TransactionCoordinator {
           const outcome = await participant.inquiry(txId);
           return { kind: 'tx_inquiry_result', txId, outcome };
         } catch (err) {
-          console.error(`[tx-coordinator] inbound inquiry ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
+          logger.error(`[tx-coordinator] inbound inquiry ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
           return { kind: 'tx_inquiry_result', txId, outcome: 'unknown' };
         }
       }
@@ -446,7 +447,7 @@ export class TransactionCoordinator {
           );
           return { kind: 'tx_query_result', txId, data };
         } catch (err) {
-          console.error(`[tx-coordinator] inbound query ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
+          logger.error(`[tx-coordinator] inbound query ${txId.slice(0, 8)} ${participant.pid} error:`, (err as Error)?.message);
           return { kind: 'tx_query_result', txId, error: (err as Error)?.message };
         }
       }

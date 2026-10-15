@@ -77,6 +77,32 @@ resumable cursor with `stack.cursor()`.
 for one provisioned app context. Anything not explicitly allowed — including every
 unclassified method — is refused.
 
+## Logging
+
+All stack logging (both `app-api` and the `core` it embeds) goes through one
+dependency-free gate, `@p2p-trust-stack/core/util/logger`. Verbosity is controlled by
+the `P2PTS_LOG_LEVEL` environment variable — or programmatically with `setLogLevel()` —
+and defaults to **`warn`**, so the stack is quiet unless you ask for more.
+
+| Level | Emits |
+|---|---|
+| `silent` | nothing |
+| `error` | errors only |
+| `warn` | errors + warnings **(default)** |
+| `info` | + lifecycle / state changes |
+| `debug` | + per-message wire traces |
+
+```bash
+P2PTS_LOG_LEVEL=info node my-app.js
+```
+
+```ts
+import { setLogLevel, setLogSink } from '@p2p-trust-stack/core/util/logger';
+
+setLogLevel('silent');
+setLogSink((level, args) => myLogger[level](...args));   // route instead of suppress
+```
+
 ## License
 
 Dual-licensed under **GPL-3.0-only** or a commercial license — see the repository's

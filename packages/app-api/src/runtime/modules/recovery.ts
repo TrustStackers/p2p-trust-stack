@@ -18,6 +18,7 @@ import { lookupIdentityViaExchange } from '@p2p-trust-stack/core/tx/services/ide
 import type { IdentityLookupResultPayload } from '@p2p-trust-stack/core/tx/services/identity-service.js';
 import { exchangePull } from '@p2p-trust-stack/core/exchange/index.js';
 import { didToUuid } from '@p2p-trust-stack/core/db/uuid-helpers.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Recovery state types (mirrors RecoveryService on the server)
@@ -166,7 +167,7 @@ export class RecoveryModule {
       if (row?.found) return row.recoveryState ?? null;
       return null;
     } catch (err) {
-      console.warn(`[recovery] exchange:recovery failed: ${(err as Error).message}`);
+      logger.warn(`[recovery] exchange:recovery failed: ${(err as Error).message}`);
       return null;
     }
   }
@@ -197,7 +198,7 @@ export class RecoveryModule {
         did,
       );
     } catch (err) {
-      console.warn(`[recovery] exchange:identity-lookup failed: ${(err as Error).message}`);
+      logger.warn(`[recovery] exchange:identity-lookup failed: ${(err as Error).message}`);
       return null;
     }
   }

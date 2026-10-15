@@ -39,6 +39,7 @@ import { peerIdFromString } from '@libp2p/peer-id';
 import { lpStream } from '@libp2p/utils';
 import type { TspTransport, TransportAddress, Libp2pTransportOptions } from './types.js';
 import { TransportTimeoutError, TransportFrameTooLargeError } from './types.js';
+import { logger } from '../util/logger.js';
 
 
 /** The dedicated TSP protocol identifier. */
@@ -213,7 +214,7 @@ export class Libp2pTransport implements TspTransport {
       const peerId = peerIdFromString(remoteAddr.peerId);
       const peerIdShort = peerId.toString().slice(0, 12);
       const addrs = remoteAddr.multiaddrs?.join(', ') ?? 'none';
-      console.log(`[Libp2pTransport] → dialing peerId=${peerIdShort}... addrs=[${addrs}] msgBytes=${message.length}`);
+      logger.debug(`[Libp2pTransport] → dialing peerId=${peerIdShort}... addrs=[${addrs}] msgBytes=${message.length}`);
 
       // If explicit multiaddrs are given, add them to the peer store so libp2p
       // can dial them even if it hasn't discovered this peer via mDNS/DHT yet.
@@ -326,7 +327,7 @@ export class Libp2pTransport implements TspTransport {
       try {
         await this.node.peerStore.patch(peerIdObj, { multiaddrs: [] });
       } catch { /* ignore */ }
-      console.log(
+      logger.debug(
         `[Libp2pTransport] ${why}: dropped cached connection/addrs to ${peerIdObj.toString().slice(0, 12)}...`,
       );
     } catch {

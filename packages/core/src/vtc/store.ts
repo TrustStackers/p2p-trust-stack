@@ -26,6 +26,7 @@ import type { Vrc, VrcClaim, VrcSignature, VtcGovernanceDoc } from './types.js';
 import { generateUuid } from '../db/uuid-helpers.js';
 import { sha256 } from '../crypto/primitives.js';
 import { cesrEncode, CESR_CODES } from '../crypto/cesr.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Row types (raw migration-table rows)
@@ -108,7 +109,7 @@ function deserializeSignatures(rows: SignatureRow[]): VrcSignature[] {
       // an unverifiable signature counts as 0, which is the honest answer. It is only reached for a signer whose
       // key this node has never seen (a remote admin on a replicated VRC); a locally-known signer resolves through
       // the `keys` join above and gets a real CESR vid, which is what makes `verifyVrc` work.
-      console.warn(
+      logger.warn(
         `[vtc:store] signature by ${r.signer_identity_uuid} has no resolvable Ed25519 key ` +
         `(primary did_document=${r.signer_did_document_uuid ?? 'none'}); reporting its identity uuid, which ` +
         `cannot be verified against a governance doc until the key is known.`,
@@ -199,7 +200,7 @@ function resolveAdmins(
     if (r.did) adminDids.push(r.did);
 
     if (!r.publicKey) {
-      console.warn(
+      logger.warn(
         `[vtc:store] admin ${r.name ?? r.uuid} of community ${communityIdentityUuid} has no ` +
         `resolvable Ed25519 key (primary did_document=${r.did ?? 'none'}); omitting it from ` +
         `adminVids. It remains in adminDids.`,
@@ -321,7 +322,7 @@ export class VtcStore {
       // VTCs/VTNs are governance organizations, not human subjects.
       subjectKind: 'organization',
     });
-    console.log(
+    logger.info(
       `[vtc:store] saving governance doc for ${doc.vtcDid.slice(0, 16)}... ` +
       `(identityUuid=${vtc.identityUuid}, admins=${doc.adminVids.length}, threshold=${doc.threshold})`,
     );
@@ -551,12 +552,12 @@ export class VtcStore {
   findEstablishedVrcPeerUuids(identityDid: string): string[] {
     const identity = this.resolver.lookupByDid(identityDid);
     if (!identity) {
-      console.warn(`[VtcStore] findEstablishedVrcPeerUuids: identity not found for DID ${identityDid.slice(0, 20)}...`);
+      logger.warn(`[VtcStore] findEstablishedVrcPeerUuids: identity not found for DID ${identityDid.slice(0, 20)}...`);
       return [];
     }
 
     const identityUuid = identity.identityUuid;
-    console.log(`[VtcStore] findEstablishedVrcPeerUuids: looking for VRC peers of uuid=${identityUuid.slice(0, 12)}...`);
+    logger.info(`[VtcStore] findEstablishedVrcPeerUuids: looking for VRC peers of uuid=${identityUuid.slice(0, 12)}...`);
 
     // 1. Relationships table: bidirectional, established
     const relRows = this.db.prepare(`
@@ -571,7 +572,7 @@ export class VtcStore {
         AND status = 'established'
     `).all(identityUuid, identityUuid, identityUuid) as { remote_uuid: string }[];
 
-    console.log(`[VtcStore] relationships query: ${relRows.length} results`);
+    logger.info(`[VtcStore] relationships query: ${relRows.length} results`);
 
     // 2. Credentials table: vrc type, issued status
     const credRows = this.db.prepare(`
@@ -586,7 +587,7 @@ export class VtcStore {
         AND status = 'issued'
     `).all(identityUuid, identityUuid, identityUuid) as { remote_uuid: string }[];
 
-    console.log(`[VtcStore] credentials query: ${credRows.length} results`);
+    logger.info(`[VtcStore] credentials query: ${credRows.length} results`);
 
     // Union dedup
     const seen = new Set<string>();
@@ -625,7 +626,7 @@ export class VtcStore {
     }
 
     const result = [...resolvedUuids];
-    console.log(`[VtcStore] findEstablishedVrcPeerUuids: ${result.length} resolved UUIDs from ${seen.size} candidates`);
+    logger.info(`[VtcStore] findEstablishedVrcPeerUuids: ${result.length} resolved UUIDs from ${seen.size} candidates`);
     return result;
   }
 
@@ -736,7 +737,7 @@ export class VtcStore {
        LIMIT 1`,
     ).get(digestHex, issuer.identityUuid, subject.identityUuid) as { uuid: string } | undefined;
     if (existing) {
-      console.log(
+      logger.info(
         `[VtcStore] Received peer VRC from ${issuerDid.slice(0, 12)}... already present (uuid=${existing.uuid}) — skipping`,
       );
       return;
@@ -773,7 +774,7 @@ export class VtcStore {
       now,
     );
 
-    console.log(
+    logger.info(
       `[VtcStore] Stored received peer VRC from ${issuerDid.slice(0, 12)}... to ${subjectDid.slice(0, 12)}...`,
     );
   }

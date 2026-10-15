@@ -28,6 +28,7 @@
 
 import type { DataSource } from '@p2p-trust-stack/core/db/data-source.js';
 import type { Operation, Outcome, Participant, Vote } from '@p2p-trust-stack/core/tx/types.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 /** Shape pushed by the server's `ceremony-event` materializer. */
 export interface CeremonyEventPushData {
@@ -95,7 +96,7 @@ export class CeremonyEventReceiveParticipant implements Participant {
       try {
         this.onPersisted?.(nudge);
       } catch (err) {
-        console.warn(`[ceremony-event-receive] observer failed: ${(err as Error)?.message ?? err}`);
+        logger.warn(`[ceremony-event-receive] observer failed: ${(err as Error)?.message ?? err}`);
       }
     }
 

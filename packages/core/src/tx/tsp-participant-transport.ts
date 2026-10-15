@@ -25,6 +25,7 @@ import { DurableInbox } from './delivery.js';
 import { attachOperationProof } from './operation-proof.js';
 import { signEd25519 } from '../crypto/primitives.js';
 import type { DataSource } from '../db/data-source.js';
+import { logger } from '../util/logger.js';
 
 /**
  * Low-level send function that delivers a ProtocolMessage to a remote peer
@@ -114,7 +115,7 @@ export class TspParticipantTransport implements ParticipantTransport {
     // automatically gets this protection.
     await this.waitForConnectivity(pid, destination);
 
-    console.log(`[tx-tsp-transport] ${pid} ← ${msg.kind} (dest=${destination.slice(0, 12)}...)`);
+    logger.debug(`[tx-tsp-transport] ${pid} ← ${msg.kind} (dest=${destination.slice(0, 12)}...)`);
     // F-010 / R1: attach the signed operation document. The final payload is signed
     // here because this is where `messageId` is already fixed — and because the
     // transport is the one component every coordinator path goes through, so no caller
@@ -130,7 +131,7 @@ export class TspParticipantTransport implements ParticipantTransport {
 
     // The response payload is the TxWireMessage from the remote participant
     const result = response.payload as TxWireMessage;
-    console.log(`[tx-tsp-transport] ${pid} → ${result.kind}`);
+    logger.debug(`[tx-tsp-transport] ${pid} → ${result.kind}`);
     return result;
   }
 
@@ -151,14 +152,14 @@ export class TspParticipantTransport implements ParticipantTransport {
     const deadline = Date.now() + this.connectivityTimeoutMs;
     let attempt = 0;
 
-    console.log(`[tx-tsp-transport] waiting for connectivity to ${pid.slice(0, 12)}... (timeout=${this.connectivityTimeoutMs}ms)`);
+    logger.debug(`[tx-tsp-transport] waiting for connectivity to ${pid.slice(0, 12)}... (timeout=${this.connectivityTimeoutMs}ms)`);
 
     while (Date.now() < deadline) {
       attempt++;
       await new Promise(resolve => setTimeout(resolve, this.connectivityPollMs));
 
       if (this.isConnectedFn(pid)) {
-        console.log(`[tx-tsp-transport] ✓ connectivity established to ${pid.slice(0, 12)}... after ${attempt} poll(s)`);
+        logger.debug(`[tx-tsp-transport] ✓ connectivity established to ${pid.slice(0, 12)}... after ${attempt} poll(s)`);
         return;
       }
     }
@@ -292,7 +293,7 @@ export function createDedupedTxInbound(
     );
 
     if (duplicate) {
-      console.log(`[tx-inbox] duplicate ${msg.kind} suppressed (key ${key}) — handler not re-invoked`);
+      logger.debug(`[tx-inbox] duplicate ${msg.kind} suppressed (key ${key}) — handler not re-invoked`);
     }
     return { duplicate, conflict, response: result };
   };

@@ -449,29 +449,23 @@ export function exportSeedPhrase(signingKeyPair: {
 // ---------------------------------------------------------------------------
 
 /**
- * Import a 24-word BIP-39 mnemonic and reconstruct the signing keypair.
+ * Convert a 24-word BIP-39 mnemonic to its raw 32-byte seed.
  *
- * Validates the checksum — throws if the mnemonic is invalid or tampered with.
+ * Validates wordlist membership AND the 8-bit checksum, so a mistyped or
+ * corrupted phrase throws rather than silently yielding a *different* identity.
+ * This is the primitive the bootstrap init tool (`scripts/init-bootstrap-env.ts`)
+ * uses to turn a developer-supplied word sequence into the libp2p Ed25519 key
+ * pair — and therefore the peer ID — without going through a keypair callback.
  *
  * @param mnemonic  Space-separated 24-word BIP-39 mnemonic.
- * @param generateEd25519KeyPairFromSeed  Function to reconstruct an Ed25519 keypair
- *                                        from a 32-byte seed.
- * @returns The reconstructed Ed25519KeyPair.
+ * @returns The 32-byte seed (entropy), ready for `generateKeyPairFromSeed`.
  */
-export async function importSeedPhrase(
-  mnemonic: string,
-  generateEd25519KeyPairFromSeed: (seed: Uint8Array) => Promise<{
-    secretKey: Uint8Array;
-    publicKey: Uint8Array;
-  }>,
-): Promise<{ secretKey: Uint8Array; publicKey: Uint8Array }> {
+export function mnemonicToSeed(mnemonic: string): Uint8Array {
   // Normalize whitespace and split words.
   const words = mnemonic.trim().split(/\s+/);
 
   if (words.length !== 24) {
-    throw new Error(
-      `importSeedPhrase: expected 24 words, got ${words.length}`,
-    );
+    throw new Error(`mnemonicToSeed: expected 24 words, got ${words.length}`);
   }
 
   // Map words to indices with validation.
@@ -480,7 +474,7 @@ export async function importSeedPhrase(
     const index = BIP39_ENGLISH_WORDLIST.indexOf(word.toLowerCase());
     if (index === -1) {
       throw new Error(
-        `importSeedPhrase: invalid mnemonic word "${word}" — not in BIP-39 wordlist`,
+        `mnemonicToSeed: invalid mnemonic word "${word}" — not in BIP-39 wordlist`,
       );
     }
     indices.push(index);
@@ -497,12 +491,33 @@ export async function importSeedPhrase(
   const actualChecksum = computeChecksum(new Uint8Array(seed));
   if (expectedChecksum !== actualChecksum) {
     throw new Error(
-      'importSeedPhrase: invalid mnemonic checksum — phrase may be corrupted or not a valid BIP-39 mnemonic',
+      'mnemonicToSeed: invalid mnemonic checksum — phrase may be corrupted or not a valid BIP-39 mnemonic',
     );
   }
 
-  // Reconstruct the Ed25519 keypair from the seed.
-  return generateEd25519KeyPairFromSeed(new Uint8Array(seed));
+  return new Uint8Array(seed);
+}
+
+/**
+ * Import a 24-word BIP-39 mnemonic and reconstruct the signing keypair.
+ *
+ * Validates the checksum — throws if the mnemonic is invalid or tampered with.
+ *
+ * @param mnemonic  Space-separated 24-word BIP-39 mnemonic.
+ * @param generateEd25519KeyPairFromSeed  Function to reconstruct an Ed25519 keypair
+ *                                        from a 32-byte seed.
+ * @returns The reconstructed Ed25519KeyPair.
+ */
+export async function importSeedPhrase(
+  mnemonic: string,
+  generateEd25519KeyPairFromSeed: (seed: Uint8Array) => Promise<{
+    secretKey: Uint8Array;
+    publicKey: Uint8Array;
+  }>,
+): Promise<{ secretKey: Uint8Array; publicKey: Uint8Array }> {
+  // Validation + derivation live in mnemonicToSeed so the checksum rule has one
+  // home (the bootstrap init tool uses it too, without a keypair callback).
+  return generateEd25519KeyPairFromSeed(mnemonicToSeed(mnemonic));
 }
 
 // ---------------------------------------------------------------------------

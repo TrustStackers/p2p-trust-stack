@@ -24,6 +24,7 @@ import {
   JANITOR_PRUNE_VRC_CEREMONIES_SQL,
 } from './schema.js';
 import { DEFAULT_JANITOR_CONFIG, type JanitorConfig } from './types.js';
+import { logger } from '../util/logger.js';
 
 export class TxJanitor {
   private readonly ds: DataSource;
@@ -40,7 +41,7 @@ export class TxJanitor {
     if (this.timer) return;
     this.timer = setInterval(() => {
       this.prune().catch((err) => {
-        console.error('[tx-janitor] prune error:', (err as Error)?.message ?? err);
+        logger.error('[tx-janitor] prune error:', (err as Error)?.message ?? err);
       });
     }, this.config.intervalMs);
     // Allow the first interval to be unref'd so it doesn't keep the process alive.
@@ -91,7 +92,7 @@ export class TxJanitor {
 
     const total = result.txLogCompleted + result.txLogIncomplete + result.outbox + result.inbox + result.participantState + result.vrcCeremonies;
     if (total > 0) {
-      console.log(`[tx-janitor] pruned ${total} expired row(s): log=${result.txLogCompleted + result.txLogIncomplete} outbox=${result.outbox} inbox=${result.inbox} participant=${result.participantState} vrc=${result.vrcCeremonies}`);
+      logger.info(`[tx-janitor] pruned ${total} expired row(s): log=${result.txLogCompleted + result.txLogIncomplete} outbox=${result.outbox} inbox=${result.inbox} participant=${result.participantState} vrc=${result.vrcCeremonies}`);
     }
 
     return result;

@@ -25,6 +25,7 @@ import type {
   Vote,
 } from './types.js';
 import { didToUuid, generateUuid } from '../db/uuid-helpers.js';
+import { logger } from '../util/logger.js';
 
 /**
  * Shape of the VTC data pushed from the utility server via the
@@ -155,7 +156,7 @@ export class VtcReceiveParticipant implements Participant {
           persisted.push({ communityUuid: data.community.uuid, kind: 'membership' });
         }
       } catch (err) {
-        console.error(`[vtc-receive] prepare failed for tx ${txId}:`, (err as Error)?.message);
+        logger.error(`[vtc-receive] prepare failed for tx ${txId}:`, (err as Error)?.message);
         return 'no';
       }
     }
@@ -175,7 +176,7 @@ export class VtcReceiveParticipant implements Participant {
       try {
         this.onPersisted?.(event);
       } catch (err) {
-        console.warn(`[vtc-receive] arrival observer failed: ${(err as Error)?.message ?? err}`);
+        logger.warn(`[vtc-receive] arrival observer failed: ${(err as Error)?.message ?? err}`);
       }
     }
 
@@ -250,7 +251,7 @@ export class VtcReceiveParticipant implements Participant {
       Math.floor(Date.now() / 1000),
     );
     await this.applyClaimTypeBindings(communityUuid, g.allowedClaimTypes);
-    console.log(`[vtc-receive] applied governance update for community ${communityUuid.slice(0, 8)}`);
+    logger.info(`[vtc-receive] applied governance update for community ${communityUuid.slice(0, 8)}`);
   }
 
   /** Write one claim-type binding per permitted type (no policy blob). */
@@ -289,7 +290,7 @@ export class VtcReceiveParticipant implements Participant {
       'SELECT uuid FROM identities WHERE uuid = ?', identityUuid,
     );
     if (!communityLocal) {
-      console.log(`[vtc-receive] community identity not found locally after upsert: ${c.uuid}`);
+      logger.info(`[vtc-receive] community identity not found locally after upsert: ${c.uuid}`);
       return;
     }
 
@@ -389,6 +390,6 @@ export class VtcReceiveParticipant implements Participant {
       }
     }
 
-    console.log(`[vtc-receive] persisted community: ${c.name ?? c.uuid} (${memberships?.length ?? 0} members)`);
+    logger.info(`[vtc-receive] persisted community: ${c.name ?? c.uuid} (${memberships?.length ?? 0} members)`);
   }
 }

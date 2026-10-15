@@ -20,6 +20,7 @@ import type { DataSource } from '@p2p-trust-stack/core/db/data-source.js';
 import type { Operation, Outcome, Participant, Vote } from '@p2p-trust-stack/core/tx/types.js';
 import { GovernanceChangeStore } from '@p2p-trust-stack/core/tx/governance-change-store.js';
 import type { ApprovalScope, GovernanceChange } from '@p2p-trust-stack/core/services/governance-change.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 /** Shape pushed by the server's `governance-proposal` materializer. */
 export interface GovernanceProposalPushData {
@@ -90,7 +91,7 @@ export class GovernanceProposalReceiveParticipant implements Participant {
         change: p.change,
         expiresAt: p.expiresAt,
       });
-      console.log(`[gov-proposal-receive] mirrored proposal ${p.proposalId.slice(0, 8)} for community ${p.communityUuid.slice(0, 8)}`);
+      logger.info(`[gov-proposal-receive] mirrored proposal ${p.proposalId.slice(0, 8)} for community ${p.communityUuid.slice(0, 8)}`);
       mirrored.push({ proposalId: p.proposalId, communityUuid: p.communityUuid });
     }
 
@@ -106,7 +107,7 @@ export class GovernanceProposalReceiveParticipant implements Participant {
       try {
         this.onPersisted?.(event);
       } catch (err) {
-        console.warn(`[gov-proposal-receive] arrival observer failed: ${(err as Error)?.message ?? err}`);
+        logger.warn(`[gov-proposal-receive] arrival observer failed: ${(err as Error)?.message ?? err}`);
       }
     }
 

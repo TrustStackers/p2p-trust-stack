@@ -56,6 +56,7 @@ import { DidPeer4Method } from '../did/did-peer4-method.js';
 import { generateUuid } from '../db/uuid-helpers.js';
 import { DidManager, COMMUNITY_KEY_PASSPHRASE } from './did-manager.js';
 import { seedDefaultBindings, resolveCommunityClaimTypes } from './policy-bindings.js';
+import { logger } from '../util/logger.js';
 
 export class CreateVtcValidationError extends Error {}
 export class CreateVtcNotFoundError extends Error {}
@@ -226,10 +227,10 @@ export async function mintMembershipVmc(
         subjectIdentityUuid: member.uuid,
       },
     });
-    console.log(`[mintMembershipVmc] VMC minted for ${membershipRole} ${member.name ?? member.uuid} in ${community.name ?? community.uuid} (credential=${result.credentialUuid.slice(0, 8)})`);
+    logger.info(`[mintMembershipVmc] VMC minted for ${membershipRole} ${member.name ?? member.uuid} in ${community.name ?? community.uuid} (credential=${result.credentialUuid.slice(0, 8)})`);
     return result.credentialUuid;
   } catch (err) {
-    console.warn(
+    logger.warn(
       `[mintMembershipVmc] VMC mint failed for ${membershipRole} ${member.name ?? member.uuid} (non-fatal):`,
       (err as Error)?.message ?? err,
     );
@@ -466,11 +467,11 @@ export async function createVtc(db: DataSource, input: CreateVtcInput): Promise<
   const didManager = new DidManager(db);
   try {
     const cDid = await didManager.createCommunityDid(communityUuid);
-    console.log(
+    logger.info(
       `[createVtc] C-DID created for community ${input.name.trim()}: ${cDid.did.slice(0, 32)}...`,
     );
   } catch (err) {
-    console.warn(
+    logger.warn(
       `[createVtc] C-DID creation failed (non-fatal):`,
       (err as Error)?.message ?? err,
     );
@@ -529,7 +530,7 @@ export async function createVtc(db: DataSource, input: CreateVtcInput): Promise<
       signerSecretKey: vtcKeys.signingKeyPair.secretKey,
     });
     await membershipsRepo.approve(db, membershipUuid, credentialUuid);
-    try { await didManager.createMemberDid(admin.uuid, communityUuid); } catch (err) { console.warn("[createVtc] M-DID skipped for admin", admin.uuid, ":", (err as Error).message); }
+    try { await didManager.createMemberDid(admin.uuid, communityUuid); } catch (err) { logger.warn("[createVtc] M-DID skipped for admin", admin.uuid, ":", (err as Error).message); }
     const membership = await membershipsRepo.findByUuid(db, membershipUuid);
     if (membership) foundingAdmins.push(membership);
   }

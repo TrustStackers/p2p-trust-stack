@@ -34,6 +34,7 @@
  */
 
 import type { DatabaseSync } from 'node:sqlite';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 // ---------------------------------------------------------------------------
 // SQL fragments
@@ -118,7 +119,7 @@ export function resolvePeerAgentName(
     return null;
   } catch (err: any) {
     // Never let a display-name lookup break the route that called it.
-    console.warn('[peer-name] resolvePeerAgentName failed:', err?.message ?? err);
+    logger.warn('[peer-name] resolvePeerAgentName failed:', err?.message ?? err);
     return null;
   }
 }

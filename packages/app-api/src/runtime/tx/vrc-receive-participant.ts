@@ -26,6 +26,7 @@ import type {
 import type { IdentityResolver } from '@p2p-trust-stack/core/services/identity-resolver.js';
 import type { VtcStore } from '@p2p-trust-stack/core/vtc/store.js';
 import { VrcCeremonyStore } from '@p2p-trust-stack/core/tx/vrc-ceremony-store.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 export interface StoreRemoteVrcParams {
   w3cVcJson: string;
@@ -93,11 +94,11 @@ export class VrcReceiveParticipant implements Participant {
           await this.ceremonyStore.setLeg(session.sessionId, { peerVrcReceived: true });
         }
 
-        console.log(
+        logger.info(
           `[vrc-receive] stored remote VRC from ${params.issuerDid.slice(0, 12)}...`,
         );
       } catch (err) {
-        console.error(`[vrc-receive] prepare failed for tx ${txId}:`, (err as Error)?.message);
+        logger.error(`[vrc-receive] prepare failed for tx ${txId}:`, (err as Error)?.message);
         return 'no';
       }
     }
@@ -117,7 +118,7 @@ export class VrcReceiveParticipant implements Participant {
       "UPDATE tx_participant_state SET outcome = 'committed' WHERE tx_id = ? AND pid = ?",
       txId, this.pid,
     );
-    console.log(`[vrc-receive] ${txId.slice(0, 8)} committed`);
+    logger.info(`[vrc-receive] ${txId.slice(0, 8)} committed`);
   }
 
   async abort(txId: string): Promise<void> {
@@ -128,7 +129,7 @@ export class VrcReceiveParticipant implements Participant {
       "UPDATE tx_participant_state SET outcome = 'aborted' WHERE tx_id = ? AND pid = ?",
       txId, this.pid,
     );
-    console.log(`[vrc-receive] ${txId.slice(0, 8)} aborted`);
+    logger.info(`[vrc-receive] ${txId.slice(0, 8)} aborted`);
   }
 
   async compensate(txId: string): Promise<void> {

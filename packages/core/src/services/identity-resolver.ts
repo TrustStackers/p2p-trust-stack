@@ -33,6 +33,7 @@ import {
   extractMlDsa65PublicKey,
 } from '../relationship/key-extract.js';
 import type { DidDocument } from '../did/types.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -476,7 +477,7 @@ export class IdentityResolver {
        WHERE peer_id = ? AND is_active = 1 AND identity_uuid <> ? LIMIT 1`,
     ).get(peerId, identityUuid) as { identity_uuid: string } | undefined;
     if (claimedByOther) {
-      console.warn(
+      logger.warn(
         `[IdentityResolver] refusing to assign peer ${peerId.slice(0, 12)}... ` +
         `to identity ${identityUuid.slice(0, 8)} — already active on ${claimedByOther.identity_uuid.slice(0, 8)}`,
       );

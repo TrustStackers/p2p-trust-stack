@@ -51,6 +51,7 @@ import { GovernanceProposalReceiveParticipant } from './governance-proposal-rece
 import type { PersistedProposalEvent } from './governance-proposal-receive-participant.js';
 import { CeremonyEventReceiveParticipant } from './ceremony-event-receive-participant.js';
 import type { PersistedCeremonyEvent } from './ceremony-event-receive-participant.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 export interface AgentTxBootstrapOptions {
   /** Agent VID for participant pid (e.g., 'peer:{vid}'). */
@@ -179,7 +180,7 @@ export async function bootstrapAgentTxCoordinator(
   // Existing databases keep their original tables (CREATE TABLE IF NOT EXISTS
   // never alters one), so columns added in later builds are applied here.
   const addedColumns = await applyTxSchemaAdditions(txDataSource);
-  console.log(`[agent-tx] tx-coordinator.db initialized at ${dbPath}`
+  logger.info(`[agent-tx] tx-coordinator.db initialized at ${dbPath}`
     + (addedColumns.length > 0 ? ` (schema additions: ${addedColumns.join(', ')})` : ''));
 
   // Create the connection watch + durable outbox (persist-before-send).
@@ -203,7 +204,7 @@ export async function bootstrapAgentTxCoordinator(
           markServerEntriesDelivered(txDataSource, options.agentName ?? null),
         )
         .catch((err) =>
-          console.error('[agent-tx] outbox drain on reconnect error:', (err as Error)?.message ?? err),
+          logger.error('[agent-tx] outbox drain on reconnect error:', (err as Error)?.message ?? err),
         );
     }
   });
@@ -243,7 +244,7 @@ export async function bootstrapAgentTxCoordinator(
     async execute(desc) {
       // Application code registers the actual variable store.
       // This is a no-op handler that gets overridden by the app.
-      console.log(`[agent-tx] setVar undo: ${desc.name} → ${desc.previousValue}`);
+      logger.info(`[agent-tx] setVar undo: ${desc.name} → ${desc.previousValue}`);
     },
   });
 
@@ -300,19 +301,19 @@ export async function bootstrapAgentTxCoordinator(
   try {
     const recovered = await coordinator.recover();
     if (recovered.length > 0) {
-      console.log(`[agent-tx] recovered ${recovered.length} interrupted transaction(s):`,
+      logger.info(`[agent-tx] recovered ${recovered.length} interrupted transaction(s):`,
         recovered.map((r) => `${r.txId}=${r.outcome}`).join(', '));
     }
   } catch (err) {
-    console.error('[agent-tx] recovery error:', (err as Error)?.message ?? err);
+    logger.error('[agent-tx] recovery error:', (err as Error)?.message ?? err);
   }
 
   // Subscribe to status events for logging
   manager.onStatus((event) => {
-    console.log(`[agent-tx ${event.txId.slice(0, 8)}] ${event.state}${event.detail ? `: ${event.detail}` : ''}`);
+    logger.info(`[agent-tx ${event.txId.slice(0, 8)}] ${event.state}${event.detail ? `: ${event.detail}` : ''}`);
   });
 
-  console.log(`[agent-tx] transaction coordinator ready (agentDid=${options.agentDid.slice(0, 12)}...)`);
+  logger.info(`[agent-tx] transaction coordinator ready (agentDid=${options.agentDid.slice(0, 12)}...)`);
 
   return {
     manager,
@@ -336,7 +337,7 @@ export async function bootstrapAgentTxCoordinator(
     shutdown: async () => {
       janitor.stop();
       await txDataSource.close();
-      console.log('[agent-tx] transaction coordinator shut down');
+      logger.info('[agent-tx] transaction coordinator shut down');
     },
   };
 }

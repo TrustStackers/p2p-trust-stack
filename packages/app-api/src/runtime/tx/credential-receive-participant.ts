@@ -33,6 +33,7 @@ import {
   type CredentialVerifyPolicy,
   type CredentialBindingPolicy,
 } from '@p2p-trust-stack/core/services/credential-factory/verify-policy.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 /**
  * Phase 6 — a minted community-governed credential delivered to the subject
@@ -148,7 +149,7 @@ export class CredentialReceiveParticipant implements Participant {
 
         await this.upsertCredential(data);
       } catch (err) {
-        console.error(`[credential-receive] prepare failed for tx ${txId}:`, (err as Error)?.message);
+        logger.error(`[credential-receive] prepare failed for tx ${txId}:`, (err as Error)?.message);
         return 'no';
       }
     }
@@ -301,9 +302,9 @@ export class CredentialReceiveParticipant implements Participant {
   private logVerdict(data: CredentialPushData, level: 'info' | 'warn' | 'error', message: string): void {
     if (!message) return; // policy=off
     const line = `[credential-receive] ${data.credentialUuid.slice(0, 8)} (${data.vcType}): ${message}`;
-    if (level === 'error') console.error(line);
-    else if (level === 'warn') console.warn(line);
-    else console.log(line);
+    if (level === 'error') logger.error(line);
+    else if (level === 'warn') logger.warn(line);
+    else logger.info(line);
   }
 
   /**
@@ -321,7 +322,7 @@ export class CredentialReceiveParticipant implements Participant {
     // a 2PC abort. Logged, not silent, so a producer that drifts is still visible.
     const vcType = data.vcType?.toLowerCase() ?? data.vcType;
     if (vcType !== data.vcType) {
-      console.warn(
+      logger.warn(
         `[credential-receive] ${data.credentialUuid.slice(0, 8)}: vcType "${data.vcType}" normalised to ` +
         `"${vcType}" for the vc_type CHECK — a producer is emitting non-canonical case`,
       );
@@ -331,7 +332,7 @@ export class CredentialReceiveParticipant implements Participant {
       'SELECT uuid FROM credentials WHERE uuid = ?', data.credentialUuid,
     );
     if (existing) {
-      console.log(`[credential-receive] credential ${data.credentialUuid.slice(0, 8)} already present locally — skipping`);
+      logger.info(`[credential-receive] credential ${data.credentialUuid.slice(0, 8)} already present locally — skipping`);
       return;
     }
 
@@ -366,7 +367,7 @@ export class CredentialReceiveParticipant implements Participant {
       data.createdAt ?? now,
     );
 
-    console.log(`[credential-receive] persisted credential ${data.credentialUuid.slice(0, 8)} (${data.vcType}) for subject ${data.subjectIdentityUuid.slice(0, 8)}`);
+    logger.info(`[credential-receive] persisted credential ${data.credentialUuid.slice(0, 8)} (${data.vcType}) for subject ${data.subjectIdentityUuid.slice(0, 8)}`);
 
     // Announce the arrival. Placed after the write and NOT on the "already present" early return above: a
     // re-delivery of a credential we already hold is not a new arrival, and re-announcing it would make a UI
@@ -384,7 +385,7 @@ export class CredentialReceiveParticipant implements Participant {
         status: data.status ?? 'issued',
       });
     } catch (err) {
-      console.warn(`[credential-receive] arrival observer failed: ${(err as Error)?.message ?? err}`);
+      logger.warn(`[credential-receive] arrival observer failed: ${(err as Error)?.message ?? err}`);
     }
   }
 }

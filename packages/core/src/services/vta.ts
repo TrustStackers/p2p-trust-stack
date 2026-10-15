@@ -18,6 +18,7 @@ import type { DidDocumentRow } from '../db/repositories/did-documents-repo.js';
 import * as keysRepo from '../db/repositories/keys-repo.js';
 import { setActiveEndpoint } from '../db/repositories/peer-endpoints-repo.js';
 import { extractEd25519PublicKey } from '../relationship/key-extract.js';
+import { logger } from '../util/logger.js';
 
 export type { Identity, SubjectKind } from '../db/repositories/identities-repo.js';
 
@@ -302,7 +303,7 @@ async function syncRemotePublicKeys(
         await updateRow();
       }
       if (previous !== next) {
-        console.log(
+        logger.info(
           `[vta] keys.${entry.keyType} updated for ${identityUuid.slice(0, 8)}…: ` +
           `${previous.slice(0, 16)}… → ${next.slice(0, 16)}… (live key from identity_push wins)`,
         );
@@ -420,14 +421,14 @@ export async function ensurePrimaryDidDocument(
         recordedByNode: input.recordedByNode,
       });
       doc = await didDocumentsRepo.findByUuid(db, docUuid);
-      console.log(`[vta] Materialized DID document for stub identity: ${input.realDid}`);
+      logger.info(`[vta] Materialized DID document for stub identity: ${input.realDid}`);
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
       // Lost an insert race against a concurrent push for the same DID —
       // adopt the winner's row instead of failing the transaction.
       doc = await didDocumentsRepo.findByRealDid(db, input.realDid);
       if (!doc) throw err;
-      console.log(`[vta] Adopted concurrently-created DID document for ${input.realDid}`);
+      logger.info(`[vta] Adopted concurrently-created DID document for ${input.realDid}`);
     }
   }
 
@@ -441,7 +442,7 @@ export async function ensurePrimaryDidDocument(
     // and keys across identity rows. Merging such orphans is a distinct
     // reconciliation step (one row per DID, re-bound to the authoritative
     // identity) and must not happen implicitly on a push.
-    console.warn(
+    logger.warn(
       `[vta] did_document for ${input.realDid} is bound to identity ${doc.identityUuid}, ` +
       `not the pushed identity ${input.identityUuid} — refusing to write across identities`,
     );
@@ -453,7 +454,7 @@ export async function ensurePrimaryDidDocument(
     // this identity's OTHER documents first, so an identity always ends with
     // exactly one primary — and this DID never gains a second row.
     await didDocumentsRepo.setPrimary(db, doc.uuid, input.identityUuid);
-    console.log(`[vta] Promoted DID document to primary for ${input.realDid} (promoted in place, no duplicate row)`);
+    logger.info(`[vta] Promoted DID document to primary for ${input.realDid} (promoted in place, no duplicate row)`);
     return await didDocumentsRepo.findByUuid(db, doc.uuid);
   }
 
@@ -477,7 +478,7 @@ export async function createRemoteVta(
     ).toString('hex');
     const liveKey = Buffer.from(input.publicKeys.ed25519, 'base64').toString('hex');
     if (docKey !== liveKey) {
-      console.warn(
+      logger.warn(
         `[vta] ${input.realDid}: DID-document #key-1 (${docKey.slice(0, 16)}…) differs from the pushed ` +
         `live keystore key (${liveKey.slice(0, 16)}…) — the handshake stores #key-1 while the agent signs ` +
         `TSP messages with the live key; this push makes the live key authoritative for verification.`,
@@ -519,7 +520,7 @@ export async function createRemoteVta(
       if (input.subjectKind) { sets.push('subject_kind = ?'); vals.push(input.subjectKind); setDescs.push(`subject_kind = ${JSON.stringify(input.subjectKind)}`); }
       if (sets.length > 0) {
         await db.run(`UPDATE identities SET ${sets.join(', ')} WHERE uuid = ?`, ...vals, existing.uuid);
-        console.log(`[vta] Backfilled identity fields for ${input.realDid}: ${setDescs.join(', ')}`);
+        logger.info(`[vta] Backfilled identity fields for ${input.realDid}: ${setDescs.join(', ')}`);
       }
 
       // Record the agent's live endpoint through the guarded peer_endpoints
@@ -537,7 +538,7 @@ export async function createRemoteVta(
           recordedByNode: input.recordedByNode,
         });
         if (result.applied) {
-          console.log(`[vta] Recorded active endpoint for ${input.realDid}`);
+          logger.info(`[vta] Recorded active endpoint for ${input.realDid}`);
         }
       }
 
@@ -549,7 +550,7 @@ export async function createRemoteVta(
       await syncRemotePublicKeys(db, existing.uuid, existingDoc.uuid, input.publicKeys, input.recordedByNode);
 
       const refreshed = await identitiesRepo.findByUuid(db, existing.uuid);
-      console.log(`[vta] Updated DID document for existing identity: ${input.realDid}`);
+      logger.info(`[vta] Updated DID document for existing identity: ${input.realDid}`);
       return {
         identity: refreshed ?? existing,
         didDocument: { ...existingDoc, documentJson: JSON.stringify(input.didDocument) },

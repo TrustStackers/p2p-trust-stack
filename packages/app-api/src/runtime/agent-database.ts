@@ -47,6 +47,7 @@ import { RelationshipStore } from '@p2p-trust-stack/core/relationship/store.js';
 import { VtcStore } from '@p2p-trust-stack/core/vtc/store.js';
 import { RotationLogStore } from '@p2p-trust-stack/core/did/rotation-log-store.js';
 import { getMigrationsDir } from '@p2p-trust-stack/core/db/migrations-dir.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Resolve shared migrations directory
@@ -118,7 +119,7 @@ export class AgentDatabase {
     // Run all P2PTS schema migrations on the shared DB (idempotent).
     const applied = runMigrations(this.db, MIGRATIONS_DIR);
     if (applied.length > 0) {
-      console.log(`[AgentDatabase] Applied ${applied.length} migration(s) to shared DB: ${applied.join(', ')}`);
+      logger.info(`[AgentDatabase] Applied ${applied.length} migration(s) to shared DB: ${applied.join(', ')}`);
     }
 
     // Open context DB (or fall back to shared DB for legacy single-DB mode).
@@ -126,7 +127,7 @@ export class AgentDatabase {
       this.contextDb = openDatabase(contextDbPath);
       const ctxApplied = runMigrations(this.contextDb, MIGRATIONS_DIR);
       if (ctxApplied.length > 0) {
-        console.log(`[AgentDatabase] Applied ${ctxApplied.length} migration(s) to context DB: ${ctxApplied.join(', ')}`);
+        logger.info(`[AgentDatabase] Applied ${ctxApplied.length} migration(s) to context DB: ${ctxApplied.join(', ')}`);
       }
     } else {
       this.contextDb = this.db;

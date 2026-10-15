@@ -55,6 +55,7 @@ import { verifyEd25519 } from '../crypto/primitives.js';
 import { cesrDecode } from '../crypto/cesr.js';
 import { CESR_CODES } from '../crypto/codes.js';
 import type { TxWireMessage } from './wire-protocol.js';
+import { logger } from '../util/logger.js';
 
 export const OPERATION_PROOF_POLICY_ENV = 'TSP_OPERATION_PROOF_POLICY';
 
@@ -154,7 +155,7 @@ export function resolveOperationProofPolicy(
   const v = (raw ?? '').trim().toLowerCase();
   if (v === 'off' || v === 'warn' || v === 'enforce') return v;
   if (v.length > 0) {
-    console.warn(
+    logger.warn(
       `[operation-proof] unrecognised ${OPERATION_PROOF_POLICY_ENV}="${raw}" — falling back to "warn"`,
     );
   }
@@ -453,7 +454,7 @@ export function gateOperationProof(
   const line =
     `[operation-proof] ${msg.kind} ${msg.txId.slice(0, 8)}: ${outcome.verdict}` +
     `${outcome.actor ? ` actor=${outcome.actor.slice(0, 12)}…` : ''} (policy=${policy}) — ${outcome.reason}`;
-  if (allow) console.log(line); else console.warn(`REFUSED ${line}`);
+  if (allow) logger.info(line); else logger.warn(`REFUSED ${line}`);
 
   return { allow, verdict: outcome.verdict, reason: outcome.reason };
 }

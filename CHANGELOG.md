@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Leveled, dependency-free logger (`@p2p-trust-stack/core/util/logger`) — every log
+  line the stack emits now routes through one gate, controlled by the `P2PTS_LOG_LEVEL`
+  environment variable (`silent` | `error` | `warn` | `info` | `debug`) or programmatically
+  with `setLogLevel()` / `setLogSink()`. The default is `warn`, so the packages are quiet
+  unless a host asks for more.
 - Initial public monorepo scaffold: two published packages
   (`@p2p-trust-stack/core` and `@p2p-trust-stack/app-api`), dual-license
   (GPL-3.0 + commercial), `exports` maps, build config, and governance docs.

@@ -26,6 +26,7 @@ import { registerExecutor } from '@p2p-trust-stack/core/services/trust-tasks/cat
 import { CEREMONY_VRC_PERSONHOOD, RELATIONSHIP_VRC_TYPE } from '@p2p-trust-stack/core/services/trust-tasks/type-uris.js';
 import type { IdentityResolver } from '@p2p-trust-stack/core/services/identity-resolver.js';
 import type { LocalIdentity, RelationshipRecord } from '@p2p-trust-stack/core/relationship/types.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 export interface MintVrcOpParams {
   record: RelationshipRecord;
@@ -129,7 +130,7 @@ export class VrcCeremonyParticipant implements Participant {
           };
 
           if (!driven.completed || !result.success) {
-            console.warn('[vrc-ceremony] mint_vrc failed');
+            logger.warn('[vrc-ceremony] mint_vrc failed');
             return 'no';
           }
 
@@ -137,7 +138,7 @@ export class VrcCeremonyParticipant implements Participant {
           // must NOT roll the mint back — the ceremony retries those legs and
           // the DTG output must persist. We therefore record NO destructive
           // undo for a successful mint.
-          console.log(
+          logger.info(
             `[vrc-ceremony] mint_vrc succeeded for ${params.record.remoteDid.slice(0, 12)}... ` +
             `(w3c_vc_json=${result.w3cVcJson?.length ?? 0}B)`,
           );
@@ -147,7 +148,7 @@ export class VrcCeremonyParticipant implements Participant {
           const params = op.params as unknown as PushVrcOpParams;
           if (!params) return 'no';
           // Validation only — actual push is via RemoteParticipant → utility server.
-          console.log(`[vrc-ceremony] push_vrc prepared: ${params.credentials.length} creds`);
+          logger.info(`[vrc-ceremony] push_vrc prepared: ${params.credentials.length} creds`);
 
           undos.push({
             type: 'push_vrc_compensation_note',
@@ -155,7 +156,7 @@ export class VrcCeremonyParticipant implements Participant {
           });
         }
       } catch (err) {
-        console.error(`[vrc-ceremony] prepare failed for ${txId.slice(0, 8)}, op ${op.op}:`, (err as Error)?.message);
+        logger.error(`[vrc-ceremony] prepare failed for ${txId.slice(0, 8)}, op ${op.op}:`, (err as Error)?.message);
         for (let i = undos.length - 1; i >= 0; i--) {
           await this.replayUndo(undos[i]);
         }
@@ -169,7 +170,7 @@ export class VrcCeremonyParticipant implements Participant {
       txId, this.pid, JSON.stringify(undos),
     );
 
-    console.log(`[vrc-ceremony] ${txId.slice(0, 8)} prepared (${operations.length} op(s), ${undos.length} undo(s))`);
+    logger.info(`[vrc-ceremony] ${txId.slice(0, 8)} prepared (${operations.length} op(s), ${undos.length} undo(s))`);
     return 'yes';
   }
 
@@ -178,7 +179,7 @@ export class VrcCeremonyParticipant implements Participant {
       'UPDATE tx_participant_state SET outcome = ? WHERE tx_id = ? AND pid = ?',
       'committed', txId, this.pid,
     );
-    console.log(`[vrc-ceremony] ${txId.slice(0, 8)} committed`);
+    logger.info(`[vrc-ceremony] ${txId.slice(0, 8)} committed`);
   }
 
   async abort(txId: string): Promise<void> {
@@ -194,7 +195,7 @@ export class VrcCeremonyParticipant implements Participant {
           await this.replayUndo(undos[i]);
         }
       } catch (err) {
-        console.error(`[vrc-ceremony] abort undo error: ${(err as Error)?.message}`);
+        logger.error(`[vrc-ceremony] abort undo error: ${(err as Error)?.message}`);
       }
     }
 
@@ -202,7 +203,7 @@ export class VrcCeremonyParticipant implements Participant {
       'UPDATE tx_participant_state SET outcome = ? WHERE tx_id = ? AND pid = ?',
       'aborted', txId, this.pid,
     );
-    console.log(`[vrc-ceremony] ${txId.slice(0, 8)} aborted`);
+    logger.info(`[vrc-ceremony] ${txId.slice(0, 8)} aborted`);
   }
 
   async compensate(txId: string): Promise<void> {
@@ -237,7 +238,7 @@ export class VrcCeremonyParticipant implements Participant {
     if (credRow) {
       await this.appDb.run('DELETE FROM credential_signatures WHERE credential_uuid = ?', credRow.uuid);
       await this.appDb.run('DELETE FROM credentials WHERE uuid = ?', credRow.uuid);
-      console.log(`[vrc-ceremony] undo: deleted VRC for ${remoteDid.slice(0, 12)}...`);
+      logger.info(`[vrc-ceremony] undo: deleted VRC for ${remoteDid.slice(0, 12)}...`);
     }
   }
 }

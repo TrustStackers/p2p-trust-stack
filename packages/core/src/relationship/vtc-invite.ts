@@ -35,6 +35,7 @@
 
 import { encodeOobi, decodeOobi } from './oobi.js';
 import { getOobiSignerFor, maybeSignOobi } from './oobi-signer.js';
+import { logger } from '../util/logger.js';
 
 export interface BuildVtcInviteParams {
   /** The community (VTC/VTN) the invitation is for. */
@@ -93,7 +94,7 @@ export function buildVtcInvite(params: BuildVtcInviteParams): VtcInviteArtifact 
 
   const connectionDid = params.serverDid && params.serverDid.length > 0 ? params.serverDid : null;
   if (!connectionDid) {
-    console.warn(
+    logger.warn(
       '[vtc-invite] server DID unknown — the connection OOBI falls back to the community DID, ' +
       'which cannot answer a dial. Set it via setServerNodeDid() at startup.',
     );
@@ -111,7 +112,7 @@ export function buildVtcInvite(params: BuildVtcInviteParams): VtcInviteArtifact 
     did: connectionDid ?? communityDid,
   }));
   if (!signerFor) {
-    console.log(
+    logger.info(
       '[vtc-invite] connection OOBI is UNSIGNED (this process is not the ML-DSA-65 authority ' +
       `for ${(connectionDid ?? communityDid).slice(0, 24)}…) — an OOBI taken from this invite ` +
       'cannot pass an "enforce" integrity policy',

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
 // Copyright (C) 2026 Trust Stackers
 
+import { logger } from '../../util/logger.js';
+
 /**
  * Credential verification policy for the RECEIVE path (F-003).
  *
@@ -57,7 +59,7 @@ function resolvePolicy(envName: string, explicit?: string): 'off' | 'warn' | 'en
   const raw = (process.env[envName] ?? '').trim().toLowerCase();
   if (raw === 'off' || raw === 'warn' || raw === 'enforce') return raw;
   if (raw) {
-    console.warn(`[credential-verify] ${envName}="${raw}" is not one of off|warn|enforce — using "warn"`);
+    logger.warn(`[credential-verify] ${envName}="${raw}" is not one of off|warn|enforce — using "warn"`);
   }
   return 'warn';
 }

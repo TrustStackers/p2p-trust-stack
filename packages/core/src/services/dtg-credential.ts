@@ -57,6 +57,7 @@ import {
   resolveDtgProfilePolicy,
   type DtgStatement,
 } from './dtg/profile-policy.js';
+import { logger } from '../util/logger.js';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -283,7 +284,7 @@ export function buildDtgCredential(params: DtgBuildParams): DtgCredentialVc {
   const profilePolicy = resolveDtgProfilePolicy();
   const asStatement = statement !== undefined && profilePolicy === 'enforce';
   if (statement !== undefined && profilePolicy === 'warn') {
-    console.warn(
+    logger.warn(
       `[dtg-profile] emitting the WD02 form for "${subtype}" because ` +
         `${DTG_PROFILE_POLICY_ENV}=warn; unset it (or set "enforce") to emit the ` +
         `v1.0 StatementCredential profile (${statement.predicate})`,

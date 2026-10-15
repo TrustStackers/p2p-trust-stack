@@ -139,6 +139,7 @@ import { LocalRotationLogSource } from '@p2p-trust-stack/core/did/rotation-log-s
 import { rotationEntryToJson, type RotationEntryJson } from '@p2p-trust-stack/core/did/rotation-entry-codec.js';
 import { registerMaterializer } from '@p2p-trust-stack/core/exchange/index.js';
 import { ExchangeEngine } from '@p2p-trust-stack/core/exchange/index.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 
 // ---------------------------------------------------------------------------
@@ -465,7 +466,7 @@ export abstract class BaseAgent implements AgentHandle {
     if (this.tspBridge.isConnected()) {
       this.pushIdentityToUtilityServer().then((ok: boolean) => {
         if (!ok) {
-          console.error('[Agent] Startup identity push not acknowledged — state retained for retry.');
+          logger.error('[Agent] Startup identity push not acknowledged — state retained for retry.');
         }
       });
     }
@@ -487,7 +488,7 @@ export abstract class BaseAgent implements AgentHandle {
     const mlDsa65KeyPair = await this.tryLoadKeyPair(keystore, this.meta.vid, 'ml_dsa_65');
     const hybridKemKeyPair = await this.tryLoadKeyPair(keystore, this.meta.vid, 'mlkem768_x25519');
     if (!mlDsa65KeyPair) {
-      console.warn(
+      logger.warn(
         `[Agent] identity ${this.meta.vid.slice(0, 12)}... has no ML-DSA-65 key — ` +
         `PQ root-of-trust signing is unavailable for it (no OOBI introduction signature, ` +
         `no rotation signature, classical-only confidential traffic). Either the identity was ` +
@@ -615,7 +616,7 @@ export abstract class BaseAgent implements AgentHandle {
     // Prune stale outbound-pending records from previous sessions.
     const pruned = this.store.pruneStaleOutbound(this.identity.did, 300);
     if (pruned > 0) {
-      console.log(`[Agent] Pruned ${pruned} stale outbound-pending relationship(s) from previous session.`);
+      logger.info(`[Agent] Pruned ${pruned} stale outbound-pending relationship(s) from previous session.`);
     }
 
     // Purge any leftover SELF-referencing relationship row (local == remote).
@@ -623,7 +624,7 @@ export abstract class BaseAgent implements AgentHandle {
     // show up as a pending line in the relationships UI.
     if (this.store.get(this.identity.did, this.identity.did)) {
       this.store.deleteRecord(this.identity.did, this.identity.did);
-      console.log('[Agent] Purged leftover self-relationship row from a previous session.');
+      logger.info('[Agent] Purged leftover self-relationship row from a previous session.');
     }
 
     // Boot the RelationshipManager.
@@ -656,7 +657,7 @@ export abstract class BaseAgent implements AgentHandle {
           );
           return didDocumentFromLookup(result);
         } catch (err) {
-          console.warn(
+          logger.warn(
             `[Agent] identity-lookup for ${did.slice(0, 24)}… failed: ${(err as Error)?.message ?? err}`,
           );
           return undefined;
@@ -670,7 +671,7 @@ export abstract class BaseAgent implements AgentHandle {
         // transport for subsequent TSP_GEN messages.
         setTimeout(() => {
           this.reconnectPeer(remoteDid).catch((err: unknown) => {
-            console.warn(`[Agent] post-handshake reconnectPeer failed for ${remoteDid.slice(0, 12)}...: ${(err as Error)?.message ?? err}`);
+            logger.warn(`[Agent] post-handshake reconnectPeer failed for ${remoteDid.slice(0, 12)}...: ${(err as Error)?.message ?? err}`);
           });
         }, 500);
       },
@@ -772,7 +773,7 @@ export abstract class BaseAgent implements AgentHandle {
               };
             }
           } catch (e) {
-            console.error('[BaseAgent] tx message handler error:', (e as Error).message);
+            logger.error('[BaseAgent] tx message handler error:', (e as Error).message);
           }
           return { protocol: '__handled__', payload: null };
         }
@@ -845,7 +846,7 @@ export abstract class BaseAgent implements AgentHandle {
               }
               return false;
             } catch (err) {
-              console.warn(
+              logger.warn(
                 `[Agent] durable outbox send failed to ${String(destination).slice(0, 12)}...: ` +
                   `${(err as Error)?.message ?? err}`,
               );
@@ -857,7 +858,7 @@ export abstract class BaseAgent implements AgentHandle {
           onCredentialPersisted: (credential) => {
             for (const handler of this.credentialReceivedHandlers) {
               try { handler(credential); } catch (err) {
-                console.warn(`[Agent] credential-received handler failed: ${(err as Error)?.message ?? err}`);
+                logger.warn(`[Agent] credential-received handler failed: ${(err as Error)?.message ?? err}`);
               }
             }
           },
@@ -866,7 +867,7 @@ export abstract class BaseAgent implements AgentHandle {
           onCommunityPersisted: (community) => {
             for (const handler of this.communityChangedHandlers) {
               try { handler(community); } catch (err) {
-                console.warn(`[Agent] community-changed handler failed: ${(err as Error)?.message ?? err}`);
+                logger.warn(`[Agent] community-changed handler failed: ${(err as Error)?.message ?? err}`);
               }
             }
           },
@@ -874,7 +875,7 @@ export abstract class BaseAgent implements AgentHandle {
           onGovernanceProposalPersisted: (proposal) => {
             for (const handler of this.governanceProposalHandlers) {
               try { handler(proposal); } catch (err) {
-                console.warn(`[Agent] governance-proposal handler failed: ${(err as Error)?.message ?? err}`);
+                logger.warn(`[Agent] governance-proposal handler failed: ${(err as Error)?.message ?? err}`);
               }
             }
           },
@@ -883,13 +884,13 @@ export abstract class BaseAgent implements AgentHandle {
           onCeremonyEventPersisted: (event) => {
             for (const handler of this.ceremonyEventHandlers) {
               try { handler(event); } catch (err) {
-                console.warn(`[Agent] ceremony-event handler failed: ${(err as Error)?.message ?? err}`);
+                logger.warn(`[Agent] ceremony-event handler failed: ${(err as Error)?.message ?? err}`);
               }
             }
           },
         },
       );
-      console.log('[Agent] transaction coordinator bootstrapped');
+      logger.info('[Agent] transaction coordinator bootstrapped');
 
       // Wire the durable outbox into the TSP client so enqueue() persists
       // before send and replays undelivered messages on reconnect.
@@ -919,7 +920,7 @@ export abstract class BaseAgent implements AgentHandle {
           },
         });
         this.exchangeEngine.startTicker(15_000);
-        console.log('[Agent] exchange engine + watermark ticker started');
+        logger.info('[Agent] exchange engine + watermark ticker started');
 
         // Phase B: wire the 'identity' recordset materializer to this agent's
         // own public identity state so exchangeEngine.push() (ack-gating +
@@ -931,7 +932,7 @@ export abstract class BaseAgent implements AgentHandle {
           const payload = await this.buildIdentityPushPayload();
           return [payload];
         });
-        console.log('[Agent] identity recordset materializer registered');
+        logger.info('[Agent] identity recordset materializer registered');
       }
 
       // Reflect the current server-connection state on the outbox watch
@@ -940,7 +941,7 @@ export abstract class BaseAgent implements AgentHandle {
 
       // ── Credential Factory ───────────────────────────────────────────
       this._credentialFactory = new CredentialFactoryImpl(this.ds);
-      console.log('[Agent] credential factory initialized');
+      logger.info('[Agent] credential factory initialized');
 
       // ── VRC Ceremony Participants ─────────────────────────────────────
       // Register participants for VRC ceremony operations on the coordinator.
@@ -955,7 +956,7 @@ export abstract class BaseAgent implements AgentHandle {
         );
         this._vrcCeremonyParticipant.setIdentity(this.identity);
         this._txBootstrap.coordinator.registerParticipant(this._vrcCeremonyParticipant);
-        console.log('[Agent] VRC ceremony participant registered');
+        logger.info('[Agent] VRC ceremony participant registered');
 
         this._vrcReceiveParticipant = new VrcReceiveParticipant(
           `peer:${this.identity.did}`,
@@ -965,7 +966,7 @@ export abstract class BaseAgent implements AgentHandle {
           this.db.resolver,
         );
         this._txBootstrap.coordinator.registerParticipant(this._vrcReceiveParticipant);
-        console.log('[Agent] VRC receive participant registered');
+        logger.info('[Agent] VRC receive participant registered');
 
         // Receiving half of the ceremony's ack_delivery leg. Registered under the
         // same `peer:{vid}` pid as the other local participants; the coordinator
@@ -977,7 +978,7 @@ export abstract class BaseAgent implements AgentHandle {
           (remoteDid) => this._handleRemoteAckRecorded(remoteDid),
         );
         this._txBootstrap.coordinator.registerParticipant(this._personhoodAckParticipant);
-        console.log('[Agent] personhood ack participant registered');
+        logger.info('[Agent] personhood ack participant registered');
       }
 
       // Register a compensation handler for VRC credential rollback
@@ -990,7 +991,7 @@ export abstract class BaseAgent implements AgentHandle {
         },
       });
     } catch (err) {
-      console.error('[Agent] FATAL: failed to bootstrap transaction coordinator:', (err as Error)?.message);
+      logger.error('[Agent] FATAL: failed to bootstrap transaction coordinator:', (err as Error)?.message);
       throw err;
     }
 
@@ -1036,13 +1037,13 @@ export abstract class BaseAgent implements AgentHandle {
     if (this.ceremonyDriverTimer) return;
     this.ceremonyDriverTimer = setInterval(() => {
       this.runCeremonyDriver().catch((err) =>
-        console.error('[Agent] ceremony driver tick error:', (err as Error)?.message ?? err),
+        logger.error('[Agent] ceremony driver tick error:', (err as Error)?.message ?? err),
       );
     }, 4_000);
     if (typeof this.ceremonyDriverTimer.unref === 'function') {
       this.ceremonyDriverTimer.unref();
     }
-    console.log('[Agent] VRC ceremony driver started');
+    logger.info('[Agent] VRC ceremony driver started');
   }
 
   // ---------------------------------------------------------------------------
@@ -1093,7 +1094,7 @@ export abstract class BaseAgent implements AgentHandle {
       // utility-server queue push on reconnect (exchange:vtc-membership) — the push is the
       // single delivery path for offline agents.
       if (this.isServerTransportPeer(peerId)) {
-        console.log(`[Agent] utility-server transport peer connected: ${peerId.slice(0, 12)}...`);
+        logger.info(`[Agent] utility-server transport peer connected: ${peerId.slice(0, 12)}...`);
         this.serverReconnectAttempt = 0;
         this.lastConnectivityError = undefined;
         // A pending reconnect is now redundant — cancel it so the supervisor
@@ -1104,7 +1105,7 @@ export abstract class BaseAgent implements AgentHandle {
           this.tspBridge.connect()
             .then(() => this.syncServerConnectionWatch())
             .catch((err: unknown) =>
-              console.warn(`[Agent] post-reconnect tspBridge.connect failed: ${(err as Error)?.message ?? err}`),
+              logger.warn(`[Agent] post-reconnect tspBridge.connect failed: ${(err as Error)?.message ?? err}`),
             );
         }
       }
@@ -1127,7 +1128,7 @@ export abstract class BaseAgent implements AgentHandle {
       // reconnect with exponential backoff so isConnected() reflects reality
       // and the connection is re-established automatically.
       if (this.isServerTransportPeer(peerId)) {
-        console.log(`[Agent] utility-server transport peer DISCONNECTED: ${peerId.slice(0, 12)}...`);
+        logger.info(`[Agent] utility-server transport peer DISCONNECTED: ${peerId.slice(0, 12)}...`);
         this.tspBridge?.markDisconnected();
         this.syncServerConnectionWatch();
         this.scheduleServerReconnect();
@@ -1171,7 +1172,7 @@ export abstract class BaseAgent implements AgentHandle {
       void this.exchangeEngine.resync('server:us-1', {
         requester: this.buildRequesterIdentity(),
       }, this.createServerTransport()).catch((err) =>
-        console.warn(`[Agent] exchange resync on-connect failed: ${(err as Error)?.message ?? err}`),
+        logger.warn(`[Agent] exchange resync on-connect failed: ${(err as Error)?.message ?? err}`),
       );
     }
   }
@@ -1202,7 +1203,7 @@ export abstract class BaseAgent implements AgentHandle {
 
     const attempt = ++this.serverReconnectAttempt;
     const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 30_000);
-    console.log(`[Agent] utility-server reconnect scheduled in ${delayMs}ms (attempt ${attempt})`);
+    logger.info(`[Agent] utility-server reconnect scheduled in ${delayMs}ms (attempt ${attempt})`);
 
     this.serverReconnectTimer = setTimeout(() => {
       this.serverReconnectTimer = undefined;
@@ -1213,7 +1214,7 @@ export abstract class BaseAgent implements AgentHandle {
         })
         .catch((err: unknown) => {
           this.lastConnectivityError = (err as Error)?.message ?? String(err);
-          console.warn(
+          logger.warn(
             `[Agent] utility-server reconnect attempt ${attempt} failed: ${this.lastConnectivityError}`,
           );
           // Keep trying forever with a capped backoff.
@@ -1263,7 +1264,7 @@ export abstract class BaseAgent implements AgentHandle {
     // server that registered without a VID.
     const cesrVid = us.vid || us.peerId;
 
-    console.log(
+    logger.info(
       `[Agent] no utility server configured — attempting discovery-based connect ` +
       `to ${us.peerId.slice(0, 12)}... (${us.multiaddrs.length} addr(s))`,
     );
@@ -1275,7 +1276,7 @@ export abstract class BaseAgent implements AgentHandle {
       did: us.did!,
     });
     await this.configureUtilityServer({ utilityServerOobi: oobi });
-    console.log('[Agent] discovery-based utility-server connect succeeded');
+    logger.info('[Agent] discovery-based utility-server connect succeeded');
     return true;
   }
 
@@ -1303,7 +1304,7 @@ export abstract class BaseAgent implements AgentHandle {
     // exactly when a stale or duplicate server-side row (which the ack-gated
     // regular push skips forever) can be repaired, and it is cheap.
     void this.forceIdentityPush('reconnect');
-    console.log(`[Agent] utility server reconnected (isConnected=${this.tspBridge.isConnected()})`);
+    logger.info(`[Agent] utility server reconnected (isConnected=${this.tspBridge.isConnected()})`);
   }
 
   // ---------------------------------------------------------------------------
@@ -1329,7 +1330,7 @@ export abstract class BaseAgent implements AgentHandle {
     if (typeof this.connectivitySupervisorTimer.unref === 'function') {
       this.connectivitySupervisorTimer.unref();
     }
-    console.log('[Agent] connectivity supervisor started');
+    logger.info('[Agent] connectivity supervisor started');
   }
 
   /** Stop the supervisor and any pending reconnect (shutdown only). */
@@ -1359,7 +1360,7 @@ export abstract class BaseAgent implements AgentHandle {
     try {
       // ── 1. Bootstrap reachability ──────────────────────────────────────
       if (!this.connectivityModule.isBootstrapConnected()) {
-        console.log('[Agent] supervisor: bootstrap not connected — re-registering');
+        logger.info('[Agent] supervisor: bootstrap not connected — re-registering');
         try {
           await this.connectivityModule.reRegisterWithBootstrap({
             libp2pNode: this.libp2pNode,
@@ -1367,7 +1368,7 @@ export abstract class BaseAgent implements AgentHandle {
           });
         } catch (err) {
           // Next tick retries. Not fatal: LAN/direct relationships still work.
-          console.warn(
+          logger.warn(
             `[Agent] supervisor: bootstrap re-registration failed: ${(err as Error)?.message ?? err}`,
           );
         }
@@ -1383,13 +1384,13 @@ export abstract class BaseAgent implements AgentHandle {
         // Only when no reconnect is already pending — the peer:disconnect
         // handler owns the fast path; this is the safety net.
         if (!this.serverReconnectTimer) {
-          console.log('[Agent] supervisor: utility-server bridge is down — reconnecting');
+          logger.info('[Agent] supervisor: utility-server bridge is down — reconnecting');
           this.scheduleServerReconnect();
         }
       }
     } catch (err) {
       this.lastConnectivityError = (err as Error)?.message ?? String(err);
-      console.warn(`[Agent] supervisor tick error: ${this.lastConnectivityError}`);
+      logger.warn(`[Agent] supervisor tick error: ${this.lastConnectivityError}`);
     } finally {
       this.connectivityTickInFlight = false;
     }
@@ -1428,7 +1429,7 @@ export abstract class BaseAgent implements AgentHandle {
         }
 
         const seconds = relay.secondsRemaining;
-        console.log(
+        logger.info(
           `[Agent] supervisor: relay session to ${relay.peerId.slice(0, 12)}... ` +
             (seconds != null ? `expires in ~${seconds}s` : 'is out of transfer grant') +
             ' — re-dialing for a fresh relay grant',
@@ -1439,7 +1440,7 @@ export abstract class BaseAgent implements AgentHandle {
         } catch (err) {
           // Keep refreshing the others; this one is covered reactively by the
           // peer:disconnect path (or the next tick) if it does expire.
-          console.warn(
+          logger.warn(
             `[Agent] supervisor: relay refresh for ${relay.peerId.slice(0, 12)}... failed: ` +
               `${(err as Error)?.message ?? err}`,
           );
@@ -1632,7 +1633,7 @@ export abstract class BaseAgent implements AgentHandle {
         { secretKey: seed, publicKey },
         this.passphrase,
       );
-      console.log('[Agent] persisted new libp2p node seed (Peer ID stable across logins)');
+      logger.info('[Agent] persisted new libp2p node seed (Peer ID stable across logins)');
       return seed;
     } finally {
       keystore.close();
@@ -1977,9 +1978,9 @@ export abstract class BaseAgent implements AgentHandle {
         name: this.getName?.() || null,
       }));
       await this.manager.sendMessage(remoteDid, body);
-      console.log(`[Agent] ⚠ duplicate-connect notice SENT to ${remoteDid.slice(0, 24)}... (peer should show the popup)`);
+      logger.info(`[Agent] ⚠ duplicate-connect notice SENT to ${remoteDid.slice(0, 24)}... (peer should show the popup)`);
     } catch (err) {
-      console.warn(`[Agent] duplicate-connect notice not delivered to ${remoteDid.slice(0, 24)}...: ${(err as Error)?.message}`);
+      logger.warn(`[Agent] duplicate-connect notice not delivered to ${remoteDid.slice(0, 24)}...: ${(err as Error)?.message}`);
     }
   }
 
@@ -2288,7 +2289,7 @@ export abstract class BaseAgent implements AgentHandle {
     const response = signPersonhoodChallenge(parsed.nonce, this.identity.signingKeyPair.secretKey, parsed.identityUuid);
     const payload = new TextEncoder().encode(JSON.stringify(response));
     try { await this.manager.sendMessage(remoteDid, payload); } catch (err) {
-      console.error(`[Agent] Failed to send personhood response: ${(err as Error)?.message ?? err}`);
+      logger.error(`[Agent] Failed to send personhood response: ${(err as Error)?.message ?? err}`);
     }
   }
 
@@ -2298,7 +2299,7 @@ export abstract class BaseAgent implements AgentHandle {
   ): Promise<void> {
     if (!this.db || !this.store) return;
     const record = this.store.get(this.identity.did, remoteDid);
-    if (!record?.remoteEd25519Key) { console.warn(`[Agent] Personhood response: no Ed25519 key for ${remoteDid.slice(0,12)}`); return; }
+    if (!record?.remoteEd25519Key) { logger.warn(`[Agent] Personhood response: no Ed25519 key for ${remoteDid.slice(0,12)}`); return; }
     const { verifyAndIssueDtgRelationshipCredential } = await import('@p2p-trust-stack/core/services/verified-channel.js');
     const dbHandle = this.db.getDbHandle();
     // Query relationships table directly — RelationshipStore.get() may not have
@@ -2316,7 +2317,7 @@ export abstract class BaseAgent implements AgentHandle {
     // promoted to primary).
     const remoteIdent = this.db.resolver.lookupByDid(remoteDid)
       ?? this.db.resolver.lookupByVid(remoteDid);
-    if (!localIdent || !remoteIdent) { console.warn('[Agent] Could not resolve identity UUIDs for DTG VRC'); return; }
+    if (!localIdent || !remoteIdent) { logger.warn('[Agent] Could not resolve identity UUIDs for DTG VRC'); return; }
     const vmId = this.identity.didDocument?.verificationMethod?.[0]?.id ?? `${this.identity.did}#key-1`;
     const peerDidRow = dbHandle.prepare('SELECT d.did FROM did_documents d WHERE d.identity_uuid = ? AND d.is_primary = 1').get(remoteIdent.identityUuid) as { did: string } | undefined;
     const result = await verifyAndIssueDtgRelationshipCredential({
@@ -2328,7 +2329,7 @@ export abstract class BaseAgent implements AgentHandle {
       issuerVerificationMethod: vmId, issuerSecretKey: this.identity.signingKeyPair.secretKey,
     });
     if (result.verified) {
-      console.log(`[Agent] ✅ DTG VRC issued for ${remoteDid.slice(0,12)}... (vrcUuid=${result.vrcUuid})`);
+      logger.info(`[Agent] ✅ DTG VRC issued for ${remoteDid.slice(0,12)}... (vrcUuid=${result.vrcUuid})`);
       // Store the VRC locally so the agent has it for offline VRC resolution.
       if (result.vrcUuid) {
         try {
@@ -2341,14 +2342,14 @@ export abstract class BaseAgent implements AgentHandle {
               this.identity.did,
               peerDidRow?.did ?? remoteDid,
             );
-            console.log(`[Agent] VRC stored locally for ${remoteDid.slice(0,12)}...`);
+            logger.info(`[Agent] VRC stored locally for ${remoteDid.slice(0,12)}...`);
           }
         } catch (err) {
-          console.warn(`[Agent] Failed to store VRC locally: ${(err as Error)?.message ?? err}`);
+          logger.warn(`[Agent] Failed to store VRC locally: ${(err as Error)?.message ?? err}`);
         }
       }
     }
-    else console.warn(`[Agent] ❌ DTG VRC failed: ${result.reason}`);
+    else logger.warn(`[Agent] ❌ DTG VRC failed: ${result.reason}`);
   }
 
   /**
@@ -2369,7 +2370,7 @@ export abstract class BaseAgent implements AgentHandle {
     handlePersonhoodAck(ctx, remoteDid, msg)
       .then(() => this._emitCeremonyAckChange(remoteDid))
       .catch(err =>
-        console.error('[Agent] handlePersonhoodAck failed:', (err as Error)?.message ?? err),
+        logger.error('[Agent] handlePersonhoodAck failed:', (err as Error)?.message ?? err),
       );
   }
 
@@ -2387,7 +2388,7 @@ export abstract class BaseAgent implements AgentHandle {
     // Canonicalize to the stored record's DID when we have one.
     const canonicalDid = rec?.remoteDid ?? parsed.from ?? remoteDid;
     const who = parsed.name?.trim() || canonicalDid.slice(0, 24);
-    console.log(`[Agent] ⚠ Duplicate OOBI connect attempted by ${who}... (${canonicalDid.slice(0, 24)}...) — relationship already exists`);
+    logger.info(`[Agent] ⚠ Duplicate OOBI connect attempted by ${who}... (${canonicalDid.slice(0, 24)}...) — relationship already exists`);
     // Persist a pending notice so the web UI can surface the popup via its
     // /api/relationships POLL (no SSE required — the dashboard already polls
     // every 2 s). Consumed by getDuplicateConnectNotice (one-shot).
@@ -2399,7 +2400,7 @@ export abstract class BaseAgent implements AgentHandle {
       try {
         handler(canonicalDid, parsed.name ?? null);
       } catch (err) {
-        console.error('[Agent] duplicate-connect-notice handler error:', (err as Error)?.message ?? err);
+        logger.error('[Agent] duplicate-connect-notice handler error:', (err as Error)?.message ?? err);
       }
     }
   }
@@ -2474,19 +2475,19 @@ export abstract class BaseAgent implements AgentHandle {
         }
       },
       onCeremonyComplete: (remoteDid) => {
-        console.log(`[Agent] 🎉 Ceremony complete with ${remoteDid.slice(0, 12)}...`);
+        logger.info(`[Agent] 🎉 Ceremony complete with ${remoteDid.slice(0, 12)}...`);
         for (const handler of this.ceremonyCompleteHandlers) {
           handler(remoteDid);
         }
       },
       onCeremonyFailed: (remoteDid, step, error) => {
-        console.error(`[Agent] 🚫 Ceremony failed at step ${step} with ${remoteDid.slice(0, 12)}...: ${error}`);
+        logger.error(`[Agent] 🚫 Ceremony failed at step ${step} with ${remoteDid.slice(0, 12)}...: ${error}`);
         for (const handler of this.ceremonyFailedHandlers) {
           handler(remoteDid, step, error);
         }
       },
       onCeremonyExpired: (remoteDid) => {
-        console.log(`[Agent] ⏱ Ceremony expired for ${remoteDid.slice(0, 24)}... — connection reset. Re-paste the OOBI to retry.`);
+        logger.info(`[Agent] ⏱ Ceremony expired for ${remoteDid.slice(0, 24)}... — connection reset. Re-paste the OOBI to retry.`);
         for (const handler of this.ceremonyExpiredHandlers) {
           handler(remoteDid);
         }
@@ -2563,7 +2564,7 @@ export abstract class BaseAgent implements AgentHandle {
       try {
         handler(canonicalDid);
       } catch (err) {
-        console.error('[Agent] ceremony ack-change handler error:', (err as Error)?.message ?? err);
+        logger.error('[Agent] ceremony ack-change handler error:', (err as Error)?.message ?? err);
       }
     }
   }
@@ -2578,12 +2579,12 @@ export abstract class BaseAgent implements AgentHandle {
     this._emitCeremonyAckChange(remoteDid);
     const rec = this.store?.get(this.identity.did, remoteDid);
     if (rec && rec.personhoodStatus === undefined) {
-      console.log(`[Agent] ${remoteDid.slice(0, 12)}... acknowledged — prompting the local user.`);
+      logger.info(`[Agent] ${remoteDid.slice(0, 12)}... acknowledged — prompting the local user.`);
       for (const handler of this.ceremonyPromptHandlers) {
         try {
           handler(remoteDid);
         } catch (err) {
-          console.error('[Agent] ceremony prompt handler error:', (err as Error)?.message ?? err);
+          logger.error('[Agent] ceremony prompt handler error:', (err as Error)?.message ?? err);
         }
       }
     }
@@ -2652,7 +2653,7 @@ export abstract class BaseAgent implements AgentHandle {
       ORDER BY i.name
     `).all(myUuid) as Array<{ uuid: string; name: string | null; did: string | null; identityUuid: string; ed25519Key: Uint8Array | null }>;
 
-    console.log(
+    logger.info(
       `[Agent] getVrcConnectedPeers: found ${rows.length} deliverable human VRC peers for uuid=${myUuid.slice(0, 12)}...`,
     );
 
@@ -2869,7 +2870,7 @@ export abstract class BaseAgent implements AgentHandle {
         const approvalsRequired = afterApprove.adminUuids?.length ?? 0;
         const approvalsReceived = afterApprove.approvalCount ?? 0;
         if (approvalsRequired > approvalsReceived) {
-          console.log(
+          logger.info(
             `[Agent] ceremony ${ceremonyId.slice(0, 8)} awaiting co-signatures ` +
             `(${approvalsReceived}/${approvalsRequired})`,
           );
@@ -2901,7 +2902,7 @@ export abstract class BaseAgent implements AgentHandle {
         totalBudgetMs: CEREMONY_POLL_DEFAULTS.totalBudgetMs,
         pollDelayMs: CEREMONY_POLL_DEFAULTS.pollDelayMs,
         onProgress: (attempt, result) => {
-          console.log(
+          logger.info(
             `[Agent] VTC ceremony ${ceremonyId.slice(0, 8)} poll #${attempt}: ` +
             `${result.status ?? result.error ?? 'no data'}`,
           );
@@ -2910,7 +2911,7 @@ export abstract class BaseAgent implements AgentHandle {
 
       switch (pollResult.outcome) {
         case 'crystallized':
-          console.log(
+          logger.info(
             `[Agent] VTC ceremony ${ceremonyId.slice(0, 8)} crystallized after ` +
             `${pollResult.attempts} poll(s) — queue will deliver VTC data`,
           );
@@ -2932,7 +2933,7 @@ export abstract class BaseAgent implements AgentHandle {
       }
 
     } catch (err) {
-      console.error('[Agent] createCommunityCeremony failed:', (err as Error)?.message ?? err);
+      logger.error('[Agent] createCommunityCeremony failed:', (err as Error)?.message ?? err);
       return { success: false, ceremonyId, error: (err as Error)?.message ?? String(err) };
     }
   }
@@ -3611,7 +3612,7 @@ export abstract class BaseAgent implements AgentHandle {
     const latestRotationEntry = currentLog[currentLog.length - 1];
     const ownedNames = latestRotationEntry?.didDocument?.alsoKnownAs ?? [];
     if (ownedNames.includes(buildNameUri(params.namespace, params.name))) {
-      console.log(
+      logger.info(
         `[Agent:name] ✓ name 'vta:${params.namespace}:${params.name}' is already registered ` +
         `to this identity — treating re-registration as a no-op`,
       );
@@ -3623,7 +3624,7 @@ export abstract class BaseAgent implements AgentHandle {
     // and maintain the shared namespace registry.  Without it, we cannot
     // guarantee uniqueness and must fail with a user-visible message.
     if (!this.tspBridge.isConnected()) {
-      console.log(`[Agent:name] utility server not connected — cannot register name`);
+      logger.info(`[Agent:name] utility server not connected — cannot register name`);
       return {
         success: false,
         reason: this.connectivityFailureMessage('register this name'),
@@ -3647,7 +3648,7 @@ export abstract class BaseAgent implements AgentHandle {
     }
 
     try {
-      console.log(
+      logger.info(
         `[Agent:name] registerName: transaction-coordinated ceremony for ` +
         `vta:${params.namespace}:${params.name} (DID: ${this.identity.did})`,
       );
@@ -3686,7 +3687,7 @@ export abstract class BaseAgent implements AgentHandle {
         transport: transportEndpoint,
       });
 
-      console.log(
+      logger.info(
         `[Agent:name] speculative rotation entry computed ` +
         `(version ${speculative.rotationEntry.version}, name '${speculative.nameUri}' in alsoKnownAs)`,
       );
@@ -3720,12 +3721,12 @@ export abstract class BaseAgent implements AgentHandle {
         const primary = chosen ?? profileList.find(p => p.isDefault) ?? profileList[0] ?? null;
         primaryProfileLabel = primary?.label ?? undefined;
         if (primaryProfileLabel) {
-          console.log(`[Agent:name] primary R "${params.namespace}:${params.name}" → profile "${primaryProfileLabel}"`);
+          logger.info(`[Agent:name] primary R "${params.namespace}:${params.name}" → profile "${primaryProfileLabel}"`);
         } else {
-          console.log(`[Agent:name] no profile to link as R-Card for ${params.namespace}:${params.name}`);
+          logger.info(`[Agent:name] no profile to link as R-Card for ${params.namespace}:${params.name}`);
         }
       } catch (err) {
-        console.error(`[Agent:name] failed to resolve primary R: ${(err as Error)?.message}`);
+        logger.error(`[Agent:name] failed to resolve primary R: ${(err as Error)?.message}`);
       }
 
       // Include the current profiles so the server's identity_push (same 2PC)
@@ -3785,7 +3786,7 @@ export abstract class BaseAgent implements AgentHandle {
               ...this.identity,
               didDocument: updatedDoc,
             };
-            console.log(
+            logger.info(
               `[Agent:name] agent identity updated with new DID document ` +
               `(alsoKnownAs added, service preserved)`,
             );
@@ -3797,7 +3798,7 @@ export abstract class BaseAgent implements AgentHandle {
               Math.floor(Date.now() / 1000),
               this.getLocalIdentityUuid(),
             );
-            console.log(`[Agent:name] DID document persisted to local database`);
+            logger.info(`[Agent:name] DID document persisted to local database`);
 
             // E.3: identity_push is folded into the SAME 2PC (see
             // registerNameViaCoordinator above), so the separate push below is no
@@ -3809,7 +3810,7 @@ export abstract class BaseAgent implements AgentHandle {
       );
 
       if (result.success) {
-        console.log(`[Agent:name] ✓ name registration committed`);
+        logger.info(`[Agent:name] ✓ name registration committed`);
         // The registration rolled the did:scid:vh log (alsoKnownAs appended).
         // Push the refreshed log NOW so the server holds it and the public
         // resolver can serve a verified resolution instead of a cached snapshot.
@@ -3817,13 +3818,13 @@ export abstract class BaseAgent implements AgentHandle {
         return { success: true };
       }
 
-      console.log(`[Agent:name] ✗ name registration aborted`);
+      logger.info(`[Agent:name] ✗ name registration aborted`);
       return {
         success: false,
         reason: result.reason ?? 'Name registration could not be completed. The name may have been taken by another user.',
       };
     } catch (err) {
-      console.error(
+      logger.error(
         `[Agent:name] ✗ registerName failed: ${(err as Error).message}`,
       );
       return { success: false, reason: (err as Error).message };
@@ -3887,11 +3888,11 @@ export abstract class BaseAgent implements AgentHandle {
             // registry recordset (exchange:registry).
             { realDid: this.identity.did, uuid: this.getLocalIdentityUuid(), role: 'vta' },
           );
-          console.log(`[Agent:name] resolveName: coordinator result found=${result.found} did=${result.did?.slice(0, 30)}...`);
+          logger.info(`[Agent:name] resolveName: coordinator result found=${result.found} did=${result.did?.slice(0, 30)}...`);
           if (result.found && result.did) {
             const doc = await this.resolveRemoteNameDidDocument(result.did, result.didDocument as Record<string, unknown> | undefined);
             if (!doc) {
-              console.warn(`[Agent:name] resolveName: no DID document resolvable for ${result.did.slice(0, 30)}...`);
+              logger.warn(`[Agent:name] resolveName: no DID document resolvable for ${result.did.slice(0, 30)}...`);
               return undefined;
             }
             const { extractPeerTarget } = await import('@p2p-trust-stack/core/did/name-resolver.js');
@@ -3913,11 +3914,11 @@ export abstract class BaseAgent implements AgentHandle {
               const rCard = (!serverCard || serverMissingKeys) ? await lookupLocalRCard(result.did) : serverCard;
               if (rCard) (target as any).rCard = rCard;
             }
-            console.log(`[Agent:name] resolveName: result=${target ? `peerId=${target.peerId.slice(0,12)}` : 'not found'} hasCard=${!!(target as any)?.rCard}`);
+            logger.info(`[Agent:name] resolveName: result=${target ? `peerId=${target.peerId.slice(0,12)}` : 'not found'} hasCard=${!!(target as any)?.rCard}`);
             return target;
           }
         } catch (err) {
-          console.warn(`[Agent] coordinator name_resolve failed: ${(err as Error).message}`);
+          logger.warn(`[Agent] coordinator name_resolve failed: ${(err as Error).message}`);
         }
       }
     }
@@ -4081,7 +4082,7 @@ export abstract class BaseAgent implements AgentHandle {
     // Establish the bidirectional relationship with the utility server
     try {
       const serverDid = await this.tspBridge.connect();
-      console.log(
+      logger.info(
         `[Agent] Connected to utility server: ${serverDid.slice(0, 12)}...`,
       );
       this.syncServerConnectionWatch();
@@ -4112,7 +4113,7 @@ export abstract class BaseAgent implements AgentHandle {
       // VTC records are delivered by the utility server's queue push
       // (exchange:vtc-membership) only, so the push is the single delivery path.
     } catch (err) {
-      console.error(
+      logger.error(
         `[Agent] Failed to connect to utility server: ${(err as Error)?.message ?? err}`,
       );
       throw err;
@@ -4237,7 +4238,7 @@ export abstract class BaseAgent implements AgentHandle {
 
         if (lastConnectivity.get(vid) !== connected) {
           lastConnectivity.set(vid, connected);
-          console.log(
+          logger.info(
             `[ceremony] peer-transport connectivity for ${vid.slice(0, 12)}... ` +
             `peerId=${peerId?.slice(0, 12) ?? 'none'} connected=${connected} ` +
             `(state-change; ${connected ? 'dialable/connected' : 'no dialable address'})`,
@@ -4246,7 +4247,7 @@ export abstract class BaseAgent implements AgentHandle {
         return connected;
       },
     });
-    console.log('[ceremony] persistent peer transport created');
+    logger.info('[ceremony] persistent peer transport created');
     return this._peerTransport;
   }
 
@@ -4261,7 +4262,7 @@ export abstract class BaseAgent implements AgentHandle {
       ctx.remotePeerVid = undefined; // peer legs set per concurrent ceremony at call time
       const advanced = await advanceDueSessions(ctx, this.identity.did);
       if (advanced > 0) {
-        console.log(`[Agent] ceremony driver advanced ${advanced} session(s)`);
+        logger.info(`[Agent] ceremony driver advanced ${advanced} session(s)`);
       }
       // A session's phase is DERIVED from its leg flags, so it can become
       // 'complete' on a write that is not part of the driver's own leg walk —
@@ -4277,17 +4278,17 @@ export abstract class BaseAgent implements AgentHandle {
       // older build.
       const finalized = await finalizeCompletedCeremonies(ctx, this.identity.did);
       if (finalized > 0) {
-        console.log(`[Agent] ceremony driver finalised ${finalized} completed ceremony(s)`);
+        logger.info(`[Agent] ceremony driver finalised ${finalized} completed ceremony(s)`);
       }
       // Expire ceremonies that never got BOTH "I know this person" acks within
       // the deadline: clears the connection attempt so a fresh OOBI exchange +
       // connect can be retried and completed.
       const expired = await expireStaleCeremonies(ctx, this.identity.did);
       if (expired > 0) {
-        console.log(`[Agent] ceremony driver expired ${expired} stale personhood ceremony(s)`);
+        logger.info(`[Agent] ceremony driver expired ${expired} stale personhood ceremony(s)`);
       }
     } catch (err) {
-      console.error(`[Agent] ceremony driver error: ${(err as Error)?.message ?? err}`);
+      logger.error(`[Agent] ceremony driver error: ${(err as Error)?.message ?? err}`);
     }
   }
 
@@ -4314,7 +4315,7 @@ export abstract class BaseAgent implements AgentHandle {
     if (!this.tspBridge.isConnected() || !serverDid) {
       this.profileSyncPending = true;
       this.profileSyncLastError = this.connectivityFailureMessage('push this identity');
-      console.warn(`[Agent] ${this.profileSyncLastError}`);
+      logger.warn(`[Agent] ${this.profileSyncLastError}`);
       // Durability: nothing is pre-enqueued here. On reconnect the fast-path
       // push (below) materializes FRESH state and enqueues it, so a write made
       // while offline is captured at reconnect time — never silently dropped.
@@ -4345,7 +4346,7 @@ export abstract class BaseAgent implements AgentHandle {
           // the outbox awaiting the reconnect drain).
           this.profileSyncPending = false;
           this.profileSyncLastError = null;
-          console.log(`[Agent] Identity push gated (unchanged, already synced): ${this.identity.did} (profiles: ${profiles.length}, credentials: ${credentials.length})`);
+          logger.info(`[Agent] Identity push gated (unchanged, already synced): ${this.identity.did} (profiles: ${profiles.length}, credentials: ${credentials.length})`);
           return true;
         }
         if (result.status === 'accepted') {
@@ -4356,12 +4357,12 @@ export abstract class BaseAgent implements AgentHandle {
           // 'pending' was genuinely never committed server-side, and must not
           // be promoted to 'delivered' (false-positive bug guard).
           await this._txBootstrap.outbox.markDelivered(result.entryId);
-          console.log(`[Agent] Identity push committed to utility server (exchange:identity via exchange engine): ${this.identity.did} (profiles: ${profiles.length}, credentials: ${credentials.length})`);
+          logger.info(`[Agent] Identity push committed to utility server (exchange:identity via exchange engine): ${this.identity.did} (profiles: ${profiles.length}, credentials: ${credentials.length})`);
           return true;
         }
         this.profileSyncPending = true;
         this.profileSyncLastError = 'identity push not committed (outbox deferred)';
-        console.warn(`[Agent] ${this.profileSyncLastError}`);
+        logger.warn(`[Agent] ${this.profileSyncLastError}`);
         return false;
       }
 
@@ -4377,23 +4378,23 @@ export abstract class BaseAgent implements AgentHandle {
           this.profileSyncLastError = null;
           // Mark THIS entry delivered (see note above).
           await this._txBootstrap.outbox.markDelivered(receipt.entryId);
-          console.log(`[Agent] Identity push committed to utility server (exchange:identity): ${this.identity.did} (profiles: ${profiles.length}, credentials: ${credentials.length})`);
+          logger.info(`[Agent] Identity push committed to utility server (exchange:identity): ${this.identity.did} (profiles: ${profiles.length}, credentials: ${credentials.length})`);
           return true;
         }
         this.profileSyncPending = true;
         this.profileSyncLastError = 'identity push not committed (outbox deferred)';
-        console.warn(`[Agent] ${this.profileSyncLastError}`);
+        logger.warn(`[Agent] ${this.profileSyncLastError}`);
         return false;
       }
 
       this.profileSyncPending = true;
       this.profileSyncLastError = 'Transaction coordinator not bootstrapped — identity push deferred';
-      console.warn(`[Agent] ${this.profileSyncLastError}`);
+      logger.warn(`[Agent] ${this.profileSyncLastError}`);
       return false;
     } catch (err) {
       this.profileSyncPending = true;
       this.profileSyncLastError = `Failed to push identity via TSP: ${(err as Error)?.message ?? err}`;
-      console.error(`[Agent] ${this.profileSyncLastError}`);
+      logger.error(`[Agent] ${this.profileSyncLastError}`);
       return false;
     }
   }
@@ -4418,7 +4419,7 @@ export abstract class BaseAgent implements AgentHandle {
         WHERE issuer_identity_uuid = ? OR subject_identity_uuid = ?
         ORDER BY uuid
       `).all(identityId, identityId) as any[];
-      console.log(`[Agent:push] collected ${credRows.length} credentials for identity ${identityId}`);
+      logger.info(`[Agent:push] collected ${credRows.length} credentials for identity ${identityId}`);
 
       for (const c of credRows) {
         credentials.push({
@@ -4452,7 +4453,7 @@ export abstract class BaseAgent implements AgentHandle {
         }
       }
     } catch (err) {
-      console.error(`[Agent:push] Failed to collect credentials: ${(err as Error).message}`);
+      logger.error(`[Agent:push] Failed to collect credentials: ${(err as Error).message}`);
     }
 
     return {
@@ -4497,7 +4498,7 @@ export abstract class BaseAgent implements AgentHandle {
       if (!log || log.length === 0) return undefined;
       return log.map((entry) => rotationEntryToJson(entry));
     } catch (err) {
-      console.warn(`[Agent:push] could not read rotation log: ${(err as Error)?.message ?? err}`);
+      logger.warn(`[Agent:push] could not read rotation log: ${(err as Error)?.message ?? err}`);
       return undefined;
     }
   }
@@ -4527,15 +4528,15 @@ export abstract class BaseAgent implements AgentHandle {
    * rotation must not fail because the server happens to be unreachable.
    */
   protected scheduleIdentityPushAfterRoll(reason: string): void {
-    console.log(`[Agent:push] rotation log changed (${reason}) — pushing identity + log to utility server`);
+    logger.info(`[Agent:push] rotation log changed (${reason}) — pushing identity + log to utility server`);
     void this.pushIdentityToUtilityServer()
       .then((ok: boolean) => {
         if (!ok) {
-          console.log(`[Agent:push] rotation-log push deferred (${reason}) — will retry on reconnect`);
+          logger.info(`[Agent:push] rotation-log push deferred (${reason}) — will retry on reconnect`);
         }
       })
       .catch((err: unknown) => {
-        console.warn(`[Agent:push] rotation-log push failed (${reason}): ${(err as Error)?.message ?? err}`);
+        logger.warn(`[Agent:push] rotation-log push failed (${reason}): ${(err as Error)?.message ?? err}`);
       });
   }
 
@@ -4574,7 +4575,7 @@ export abstract class BaseAgent implements AgentHandle {
    */
   private async forceIdentityPush(reason: string): Promise<boolean> {
     if (this._forceIdentityPushInFlight) {
-      console.log(`[Agent] forced identity push already in flight — skipping (${reason})`);
+      logger.info(`[Agent] forced identity push already in flight — skipping (${reason})`);
       return false;
     }
     if (!this._txBootstrap || !this.tspBridge.isConnected()) return false;
@@ -4591,20 +4592,20 @@ export abstract class BaseAgent implements AgentHandle {
       });
 
       if (result.outcome === 'committed') {
-        console.log(
+        logger.info(
           `[Agent] forced identity push committed (${reason}) — server identity/key state re-asserted: ${this.identity.did}`,
         );
         this.profileSyncPending = false;
         this.profileSyncLastError = null;
         return true;
       }
-      console.warn(
+      logger.warn(
         `[Agent] forced identity push NOT committed (${reason}): outcome=${result.outcome} — ` +
         `the regular push path will retry`,
       );
       return false;
     } catch (err) {
-      console.warn(
+      logger.warn(
         `[Agent] forced identity push failed (${reason}): ${(err as Error)?.message ?? err}`,
       );
       return false;
@@ -4666,10 +4667,10 @@ export abstract class BaseAgent implements AgentHandle {
     try {
       const identityId = this.getLocalIdentityUuid();
       const profileList = await profilesService.listProfiles(this.ds, identityId);
-      console.log(`[Agent:push] collected ${profileList.length} profiles for identity ${identityId}`);
+      logger.info(`[Agent:push] collected ${profileList.length} profiles for identity ${identityId}`);
       for (const p of profileList) {
         const claims = await profilesService.listClaims(this.ds, p.uuid);
-        console.log(`[Agent:push]   profile uuid=${p.uuid} label="${p.label}" claims=${claims.length}`);
+        logger.info(`[Agent:push]   profile uuid=${p.uuid} label="${p.label}" claims=${claims.length}`);
         profiles.push({
           label: p.label,
           purpose: p.purpose ?? undefined,
@@ -4683,7 +4684,7 @@ export abstract class BaseAgent implements AgentHandle {
         });
       }
     } catch (err) {
-      console.error(`[Agent:push] Failed to collect profiles: ${(err as Error).message}`, (err as Error).stack);
+      logger.error(`[Agent:push] Failed to collect profiles: ${(err as Error).message}`, (err as Error).stack);
     }
     return profiles;
   }

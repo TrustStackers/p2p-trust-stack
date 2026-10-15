@@ -64,6 +64,7 @@ import {
   type VrcCeremonySession,
   type VrcCeremonyStepResult,
 } from '../tx/vrc-ceremony-store.js';
+import { logger } from '../util/logger.js';
 
 // ── Ceremony / retry policy ───────────────────────────────────────────────
 /** Number of attempts per leg before the ceremony is marked failed. */
@@ -257,7 +258,7 @@ export async function acknowledgePeer(
 ): Promise<void> {
   const record = ctx.store.get(ctx.identity.did, remoteDid);
   if (!record || record.direction !== 'bidirectional') {
-    console.warn('[ceremony] Cannot acknowledge: no bidirectional relationship');
+    logger.warn('[ceremony] Cannot acknowledge: no bidirectional relationship');
     return;
   }
 
@@ -267,7 +268,7 @@ export async function acknowledgePeer(
   if (!session.localAcked) {
     await ctx.ceremonyStore.setLocalAcked(session.sessionId);
   }
-  console.log(`[ceremony] Local acknowledged ${remoteDid.slice(0, 12)}...`);
+  logger.info(`[ceremony] Local acknowledged ${remoteDid.slice(0, 12)}...`);
 
   // NO fire-and-forget send here. The acknowledgment is already durably recorded
   // above; DELIVERY is the `ack_delivery` coordinator leg inside
@@ -289,7 +290,7 @@ export async function handlePersonhoodAck(
 ): Promise<void> {
   const record = ctx.store.get(ctx.identity.did, remoteDid);
   if (!record || record.direction !== 'bidirectional') {
-    console.warn('[ceremony] Ignoring personhood_ack: no bidirectional relationship');
+    logger.warn('[ceremony] Ignoring personhood_ack: no bidirectional relationship');
     return;
   }
 
@@ -301,7 +302,7 @@ export async function handlePersonhoodAck(
 
   // If remote hasn't been acknowledged yet locally, prompt the local user.
   if (remoteStatus === undefined) {
-    console.log(`[ceremony] Remote ${remoteDid.slice(0, 12)}... acknowledged. Prompting local user.`);
+    logger.info(`[ceremony] Remote ${remoteDid.slice(0, 12)}... acknowledged. Prompting local user.`);
     ctx.onPromptToAcknowledge?.(remoteDid, msg.from);
     return;
   }
@@ -524,7 +525,7 @@ async function advanceCeremonyInner(
   }
 
   const myDid = ctx.identity.did;
-  console.log(
+  logger.info(
     `[ceremony] advance ${session.sessionId.slice(0, 8)} phase=${session.phase} ` +
     `localMinted=${session.localMinted} sentToPeer=${session.sentToPeer} ` +
     `sentToServer=${session.sentToServer} peerVrcReceived=${session.peerVrcReceived} attempt=${session.attempt}`,
@@ -550,14 +551,14 @@ async function advanceCeremonyInner(
     const w3cAfterMint = getLocalVc(ctx, session, myDid);
     const mintRowCount = countLocalVrcRows(ctx, session, myDid);
     if (!w3cAfterMint) {
-      console.error(
+      logger.error(
         `[ceremony] ✗ mint coordinator committed but local VRC not readable for ${session.remoteDid.slice(0, 12)}... ` +
         `(rows=${mintRowCount}, w3c_vc_json=${w3cAfterMint ? 'present' : 'MISSING'})`,
       );
       return await legFailed(ctx, session, 'mint_local',
         mintRowCount === 0 ? 'mint committed but no credential row' : 'mint committed but w3c_vc_json missing');
     }
-    console.log(`[ceremony] ✓ local VRC minted + verified for ${session.remoteDid.slice(0, 12)}... (rows=${mintRowCount}, w3c=${w3cAfterMint.length}B)`);
+    logger.info(`[ceremony] ✓ local VRC minted + verified for ${session.remoteDid.slice(0, 12)}... (rows=${mintRowCount}, w3c=${w3cAfterMint.length}B)`);
     const phase = (await setLegAndFinalize(ctx, session.sessionId, { localMinted: true })).phase;
     await ctx.ceremonyStore.clearAttempt(session.sessionId);
     return { advanced: true, phase, step: 'personal_local' };
@@ -574,7 +575,7 @@ async function advanceCeremonyInner(
       const rows = countLocalVrcRows(ctx, session, myDid);
       return await legFailed(ctx, session, 'peer_delivery', `no locally minted VRC (credential rows=${rows}, w3c_vc_json missing)`);
     }
-    console.log(`[ceremony] peer_delivery: sending store_remote_vrc to ${session.remoteDid.slice(0, 12)}... (w3c=${w3c.length}B)`);
+    logger.info(`[ceremony] peer_delivery: sending store_remote_vrc to ${session.remoteDid.slice(0, 12)}... (w3c=${w3c.length}B)`);
     // The peer_delivery leg shares the local agent's full identity record (not
     // just the VRC) so the receiving agent can populate its local identities
     // table with the sender's login name etc. The receiver re-derives the row
@@ -664,7 +665,7 @@ export async function advanceDueSessions(
       const result = await advanceCeremony(ctx, s.sessionId);
       if (result.advanced) touched++;
     } catch (err) {
-      console.warn(`[ceremony] advance error for ${s.sessionId.slice(0, 8)}:`, (err as Error)?.message ?? err);
+      logger.warn(`[ceremony] advance error for ${s.sessionId.slice(0, 8)}:`, (err as Error)?.message ?? err);
     }
   }
   return touched;
@@ -742,7 +743,7 @@ export async function teardownCeremony(
   await ctx.ceremonyStore.deleteByPair(ctx.identity.did, remoteDid);
   ctx.store.deleteRecord(ctx.identity.did, remoteDid);
 
-  console.log(
+  logger.info(
     `[ceremony] torn down incomplete ceremony with ${remoteDid.slice(0, 24)}... ` +
     `(relationship + ceremony session cleared; connection attempt reset)`,
   );
@@ -767,7 +768,7 @@ export async function expireStaleCeremonies(
     if (await teardownCeremony(ctx, record.remoteDid)) expired++;
   }
   if (expired > 0) {
-    console.log(`[ceremony] expired ${expired} stale personhood ceremony(s)`);
+    logger.info(`[ceremony] expired ${expired} stale personhood ceremony(s)`);
   }
   return expired;
 }
@@ -807,11 +808,11 @@ async function runCoordinated(
       COORDINATED_LEG_TIMEOUT_MS,
       `coordinated leg timed out after ${COORDINATED_LEG_TIMEOUT_MS}ms`,
     );
-    console.log(`[ceremony] coordinated leg outcome=${result.outcome}`);
+    logger.info(`[ceremony] coordinated leg outcome=${result.outcome}`);
     return result.outcome;
   } catch (err) {
     const msg = (err as Error)?.message ?? String(err);
-    console.error('[ceremony] coordinated leg failed:', msg);
+    logger.error('[ceremony] coordinated leg failed:', msg);
     return 'aborted';
   }
 }
@@ -882,10 +883,10 @@ async function legFailed(
     session.sessionId, step, error, delay, VRC_CEREMONY_MAX_ATTEMPTS,
   );
   if (updated.phase === 'failed') {
-    console.error(`[ceremony] failed at step ${step}: ${error}`);
+    logger.error(`[ceremony] failed at step ${step}: ${error}`);
     ctx.onCeremonyFailed?.(session.remoteDid, step, error);
   } else {
-    console.warn(`[ceremony] step ${step} attempt ${updated.attempt} failed (retry in ${delay}ms): ${error}`);
+    logger.warn(`[ceremony] step ${step} attempt ${updated.attempt} failed (retry in ${delay}ms): ${error}`);
   }
   return { advanced: false, phase: updated.phase, step, error };
 }

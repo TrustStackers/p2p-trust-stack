@@ -24,6 +24,7 @@ import type { Libp2p } from 'libp2p';
 import { multiaddr } from '@multiformats/multiaddr';
 import { peerIdFromString } from '@libp2p/peer-id';
 import { BootstrapClient, type DiscoveredPeer } from '@p2p-trust-stack/core/transport/bootstrap-client.js';
+import { loadBootstrapEnv, buildBootstrapUrls, type BootstrapEnv } from '@p2p-trust-stack/core/config/bootstrap-env.js';
 
 import { NetworkDetectModule, type NetworkProfile, buildDialableMultiaddrs } from '@p2p-trust-stack/core/platform/network-detect.js';
 import {
@@ -69,6 +70,10 @@ export class ConnectivityModule {
     net?: string;
     /** True when this is a test-suite agent (bootstrap TTL-prunes it). */
     test?: boolean;
+    /** Pre-loaded bootstrap env (composition root injection). */
+    bootstrapEnv?: BootstrapEnv;
+    /** Explicit `.env` path. Defaults to `<cwd>/.env`. */
+    bootstrapEnvPath?: string;
   }): Promise<void> {
     this.libp2pNode = params.libp2pNode;
     this.onStatus = params.onStatus;
@@ -77,7 +82,28 @@ export class ConnectivityModule {
     this.net = params.net;
     this.isTest = params.test === true;
 
-    this.bootstrapClient = new BootstrapClient();
+    // Resolve the bootstrap/relay identity + address from the component's `.env`
+    // (through src/config/bootstrap-env.ts). There is no hardcoded default and no
+    // `process.env` override anymore, so a missing/malformed config degrades to
+    // LAN-only mode — the same behaviour as an unreachable server, and never a
+    // silent wrong address.
+    let bootstrapEnv = params.bootstrapEnv;
+    if (!bootstrapEnv) {
+      try {
+        bootstrapEnv = loadBootstrapEnv(
+          params.bootstrapEnvPath ? { path: params.bootstrapEnvPath } : {},
+        );
+      } catch (err) {
+        this.bootstrapConnected = false;
+        params.onStatus?.(
+          `Bootstrap config unavailable (${err instanceof Error ? err.message : 'unknown'}) — ` +
+          'continuing in LAN-only mode.',
+        );
+        return;
+      }
+    }
+    const { tcpUrl, wsUrl } = buildBootstrapUrls(bootstrapEnv);
+    this.bootstrapClient = new BootstrapClient(tcpUrl, wsUrl);
 
     // Wire up auto-reconnect status events.
     //

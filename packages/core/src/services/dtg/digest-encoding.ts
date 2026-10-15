@@ -24,6 +24,7 @@
  */
 import { sha256 } from '../../crypto/primitives.js';
 import { toBase58btc, fromBase58btc } from '../dtg-credential.js';
+import { logger } from '../../util/logger.js';
 
 /** Multihash code for SHA-256 (table 1 of the multihash spec). */
 const SHA2_256_CODE = 0x12;
@@ -96,7 +97,7 @@ export function toDigestMultibase(raw: string): string {
     return toSha256MultibaseMultihash(bytes);
   }
 
-  console.warn(
+  logger.warn(
     `[dtg-profile] endorsedCredentialDigest is neither a multibase multihash nor a ` +
       `sha256 hex digest; passing it through unencoded (${raw.slice(0, 24)}…)`,
   );

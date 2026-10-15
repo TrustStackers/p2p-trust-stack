@@ -21,6 +21,7 @@
  */
 
 import type { ExchangeEvent, ExchangePubsubTransport, RecordSetName } from '../types.js';
+import { logger } from '../../util/logger.js';
 
 /** Inbound event dedup cache (same LRU semantics as the legacy ReplicationHandler). */
 const DEDUP_TTL_MS = 300_000;
@@ -84,7 +85,7 @@ export class ExchangePubsubParticipant {
       void this.route(data);
     });
     this.started = true;
-    console.log(`[exchange-pubsub] subscribed to ${this.defaultTopic} (${this.pid})`);
+    logger.debug(`[exchange-pubsub] subscribed to ${this.defaultTopic} (${this.pid})`);
   }
 
   /** Publish an ExchangeEvent over the topic. */
@@ -117,10 +118,10 @@ export class ExchangePubsubParticipant {
       try {
         await handler(event);
       } catch (err) {
-        console.error(`[exchange-pubsub] apply ${event.recordSet}/${event.rowUuid.slice(0, 8)}:`, (err as Error)?.message);
+        logger.error(`[exchange-pubsub] apply ${event.recordSet}/${event.rowUuid.slice(0, 8)}:`, (err as Error)?.message);
       }
     } else {
-      console.log(
+      logger.debug(
         `[exchange-pubsub] received ${event.recordSet} change ${event.rowUuid.slice(0, 8)} (` +
           `${event.eventType}) — no handler registered; authoritative state is re-materialized on next sync`,
       );

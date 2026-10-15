@@ -20,6 +20,7 @@
 
 import type { DataSource } from '../data-source.js';
 import { didToUuid, generateUuid } from '../uuid-helpers.js';
+import { logger } from '../../util/logger.js';
 
 export type IdentityRole = 'vta' | 'vtc' | 'vtn';
 export type SubjectKind = 'human' | 'ai_agent' | 'object' | 'organization';
@@ -138,7 +139,7 @@ export async function create(db: DataSource, input: CreateIdentityInput): Promis
           now, identityUuid, input.peerId,
         );
       } else {
-        console.warn(
+        logger.warn(
           `[identities-repo] refusing to assign peer ${String(input.peerId).slice(0, 12)}... ` +
           `to identity ${identityUuid.slice(0, 8)} — already active on ${owner.identity_uuid.slice(0, 8)}`,
         );
@@ -319,7 +320,7 @@ async function upsertEndpointGuarded(db: DataSource, identityUuid: string, peerI
     peerId,
   );
   if (owner && owner.is_active === 1 && owner.identity_uuid !== identityUuid) {
-    console.warn(
+    logger.warn(
       `[identities-repo] replication refused to assign peer ${peerId.slice(0, 12)}... ` +
       `to identity ${identityUuid.slice(0, 8)} — already active on ${owner.identity_uuid.slice(0, 8)}`,
     );

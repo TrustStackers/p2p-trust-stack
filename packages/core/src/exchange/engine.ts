@@ -30,6 +30,7 @@ import type {
   ResyncPolicy,
 } from './types.js';
 import { bumpWatermark, payloadDigest, readWatermark, readWatermarkFull } from './watermark.js';
+import { logger } from '../util/logger.js';
 
 /** Columns that must never ride the exchange (N6 hard invariant). */
 export const FORBIDDEN_PROJECTION_KEYS: readonly string[] = [
@@ -390,7 +391,7 @@ export class ExchangeEngine {
       if (err instanceof ExchangeError && err.code === 'invalid_projection') {
         throw err;
       }
-      console.warn(`[exchange] enqueueFanout '${name}' validation skipped: ${(err as Error)?.message ?? err}`);
+      logger.warn(`[exchange] enqueueFanout '${name}' validation skipped: ${(err as Error)?.message ?? err}`);
     }
 
     const targets = await this.fanoutStore.targets(name, ref);
@@ -436,7 +437,7 @@ export class ExchangeEngine {
         // other node (e.g. vtc-membership on the agent is a server push) — skip
         // it silently. Any other failure surfaces but never blocks the driver.
         if (err instanceof ExchangeError && err.code === 'not_wired') continue;
-        console.warn(`[exchange] resync '${def.name}' failed: ${(err as Error)?.message ?? err}`);
+        logger.warn(`[exchange] resync '${def.name}' failed: ${(err as Error)?.message ?? err}`);
       }
     }
 
@@ -455,7 +456,7 @@ export class ExchangeEngine {
       void this.tick();
     }, Math.max(intervalMs, 1_000));
     this.ticker.unref?.();
-    console.log(`[exchange] watermark ticker started (${intervalMs}ms)`);
+    logger.info(`[exchange] watermark ticker started (${intervalMs}ms)`);
   }
 
   /** One tick — drive `periodic(ms)` defs for which the interval has elapsed. */
@@ -475,7 +476,7 @@ export class ExchangeEngine {
         break; // one def per tick keeps the loop fair
       }
     } catch (err) {
-      console.error(`[exchange] tick error: ${(err as Error)?.message ?? err}`);
+      logger.error(`[exchange] tick error: ${(err as Error)?.message ?? err}`);
     }
   }
 

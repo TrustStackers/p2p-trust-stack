@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
 // Copyright (C) 2026 Trust Stackers
 
+import { logger } from '../../util/logger.js';
+
 /**
  * DTG statement-profile policy (F-002, decided 2026-09-25).
  *
@@ -63,7 +65,7 @@ export function resolveDtgProfilePolicy(
   const value = (raw ?? '').trim().toLowerCase();
   if (value === '') return DEFAULT_DTG_PROFILE_POLICY;
   if (value === 'off' || value === 'warn' || value === 'enforce') return value;
-  console.warn(
+  logger.warn(
     `[dtg-profile] unrecognised ${DTG_PROFILE_POLICY_ENV}="${raw}" — using ` +
       `"${DEFAULT_DTG_PROFILE_POLICY}"`,
   );

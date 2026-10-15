@@ -30,6 +30,7 @@ import type {
 import { buildCleanPeer4FromDocument, extractDisplayNameFromDocument } from './key-extract.js';
 import { ceremonyTrace } from './ceremony-trace.js';
 import { generateUuid } from '../db/uuid-helpers.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Row type (raw migration-table row + JOINed columns)
@@ -580,7 +581,7 @@ export class RelationshipStore {
     this.db.prepare(
       `UPDATE did_documents SET is_primary = 1, updated_at = unixepoch() WHERE uuid = ?`,
     ).run(targetUuid);
-    console.log(
+    logger.info(
       `[RelationshipStore] ✓ promoted did_documents ${targetUuid.slice(0, 12)}... to primary for identity ${remoteIdentityUuid.slice(0, 12)}... (confirmBidirectional)`,
     );
   }

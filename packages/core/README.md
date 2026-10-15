@@ -51,8 +51,9 @@ const transport = new Libp2pTransport(node);
 | `@p2p-trust-stack/core/db` | DataSource abstraction, migrations (20 shipped `.sql` files), typed repositories |
 | `@p2p-trust-stack/core/services` | Shared business logic (VTA/VTC creation, profiles, recovery, policy engine, credential factory) |
 | `@p2p-trust-stack/core/platform` | `P2PTS_HOME` resolution and network detection |
+| `@p2p-trust-stack/core/config` | Bootstrap/relay config loader (typed `.env` → `BootstrapEnv`, `buildBootstrapUrls`) |
 | `@p2p-trust-stack/core/tsp-handlers` | TSP protocol envelope types |
-| `@p2p-trust-stack/core/util` | Small shared utilities (dedup log) |
+| `@p2p-trust-stack/core/util` | Small shared utilities (leveled `logger`, dedup log) |
 
 The package ships `migrations/` (20 SQL files) and `SCHEMA_VERSION` alongside `dist/`.
 
@@ -69,6 +70,32 @@ const store = new SqliteKeyStore('/path/p2pts-keystore.db');
 
 // TSP message seal/open
 import { tspSeal, tspOpen } from '@p2p-trust-stack/core/tsp/v3';
+```
+
+## Logging
+
+Every log line the stack emits goes through one dependency-free gate,
+`@p2p-trust-stack/core/util/logger`. Verbosity is controlled by the `P2PTS_LOG_LEVEL`
+environment variable — or programmatically with `setLogLevel()` — and defaults to
+**`warn`**, so the package stays quiet unless you ask for more.
+
+| Level | Emits |
+|---|---|
+| `silent` | nothing |
+| `error` | errors only |
+| `warn` | errors + warnings **(default)** |
+| `info` | + lifecycle / state changes |
+| `debug` | + per-message wire traces |
+
+```bash
+P2PTS_LOG_LEVEL=info node my-app.js
+```
+
+```ts
+import { setLogLevel, setLogSink } from '@p2p-trust-stack/core/util/logger';
+
+setLogLevel('debug');                                    // or 'silent'
+setLogSink((level, args) => myLogger[level](...args));   // route instead of suppress
 ```
 
 ## License

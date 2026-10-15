@@ -35,6 +35,7 @@ import * as keysRepo from '../db/repositories/keys-repo.js';
 import * as didDocumentsRepo from '../db/repositories/did-documents-repo.js';
 import * as noncesRepo from '../db/repositories/nonces-repo.js';
 import { verifyEd25519 } from '../crypto/primitives.js';
+import { logger } from '../util/logger.js';
 
 export const MEMBERSHIP_PRESENTATION_POLICY_ENV = 'TSP_MEMBERSHIP_PRESENTATION_POLICY';
 
@@ -98,7 +99,7 @@ export function resolveMembershipPresentationPolicy(
   const v = (raw ?? '').trim().toLowerCase();
   if (v === 'off' || v === 'warn' || v === 'enforce') return v;
   if (v.length > 0) {
-    console.warn(
+    logger.warn(
       `[membership-presentation] unrecognised ${MEMBERSHIP_PRESENTATION_POLICY_ENV}="${raw}" — falling back to "warn"`,
     );
   }
@@ -267,12 +268,12 @@ export async function gateMembershipAdmission(
   const refuse = refusesAdmission(policy, outcome);
 
   if (refuse) {
-    console.warn(
+    logger.warn(
       `[membership-presentation] REFUSED admission of ${input.memberIdentityUuid.slice(0, 8)}… ` +
       `to community ${input.communityUuid.slice(0, 8)}…: ${outcome.verdict} — ${outcome.reason}`,
     );
   } else {
-    console.log(
+    logger.info(
       `[membership-presentation] admission of ${input.memberIdentityUuid.slice(0, 8)}… ` +
       `to ${input.communityUuid.slice(0, 8)}…: ${outcome.verdict} (policy=${policy})`,
     );

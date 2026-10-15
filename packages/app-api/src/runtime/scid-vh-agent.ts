@@ -22,6 +22,7 @@ import type { AgentConfig } from './types.js';
 import { BaseAgent, type CryptoIdentityResult } from './base-agent.js';
 import { ContextManager, listProvisionedApps, type AppCredentialBundle } from './context-manager.js';
 import { exportSeedPhrase, importSeedPhrase } from '@p2p-trust-stack/core/crypto/seed-phrase.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 
 // ---------------------------------------------------------------------------
@@ -132,9 +133,9 @@ export class ScidVhAgent extends BaseAgent {
 
         this.pendingGenesisLog = undefined;
         tempDb.close();
-        console.log('[ScidVhAgent] Genesis rotation log persisted during initIdentity');
+        logger.info('[ScidVhAgent] Genesis rotation log persisted during initIdentity');
       } catch (err) {
-        console.warn(
+        logger.warn(
           '[ScidVhAgent] Failed to persist genesis rotation log during initIdentity: ' +
           ((err as Error)?.message ?? err) + '. wireUpAfterStart() will retry.',
         );
@@ -179,7 +180,7 @@ export class ScidVhAgent extends BaseAgent {
     try {
       resolvedDoc = this.didMethod.resolve(this.identity.did);
     } catch (err) {
-      console.warn(
+      logger.warn(
         '[ScidVhAgent] resolve() failed after genesis log append: ' +
         ((err as Error)?.message ?? err) + '. Using existing identity document.',
       );

@@ -21,6 +21,7 @@ import * as didDocumentsRepo from '../db/repositories/did-documents-repo.js';
 import * as keysRepo from '../db/repositories/keys-repo.js';
 import { decryptSecretKey } from '../keystore/sqlite-keystore.js';
 import { cesrEncode, CESR_CODES } from '../crypto/cesr.js';
+import { logger } from '../util/logger.js';
 
 /**
  * Passphrase used to encrypt community signing keys at rest on the utility
@@ -112,7 +113,7 @@ export class DidManager {
         signerSecretKey,
       };
     } catch (err) {
-      console.warn(
+      logger.warn(
         `[did-manager] failed to decrypt community signing key for ${communityIdentityUuid.slice(0, 8)}...:`,
         (err as Error).message,
       );

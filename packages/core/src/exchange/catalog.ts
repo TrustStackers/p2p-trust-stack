@@ -20,6 +20,7 @@ import * as keysRepo from '../db/repositories/keys-repo.js';
 import { REPLICATION_TOPIC } from '../transport/replication.js';
 import type { ExchangeContext, RecordSetDef, RecordSetName } from './types.js';
 import { ExchangeError } from './types.js';
+import { logger } from '../util/logger.js';
 
 /** Side-specific materializer overrides (agent/server wire their own later). */
 const materializerOverrides = new Map<RecordSetName, RecordSetDef['materialize']>();
@@ -162,7 +163,7 @@ async function materializeRcard(db: DataSource, ctx: ExchangeContext): Promise<R
   } catch (err) {
     // resolveEffectivePolicy is best-effort for disclosure gating — a db issue
     // must not break the pull; fall through with no extra restriction.
-    console.warn(`[exchange:rcard] policy filter unavailable: ${(err as Error)?.message ?? err}`);
+    logger.warn(`[exchange:rcard] policy filter unavailable: ${(err as Error)?.message ?? err}`);
   }
   let claims = card.claims;
   if (effectiveAllowed !== null) {

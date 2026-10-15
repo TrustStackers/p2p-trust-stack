@@ -32,6 +32,7 @@ import type {
   Vote,
 } from '@p2p-trust-stack/core/tx/types.js';
 import { VrcCeremonyStore } from '@p2p-trust-stack/core/tx/vrc-ceremony-store.js';
+import { logger } from '@p2p-trust-stack/core/util/logger.js';
 
 /** Parameters carried by the `personhood_ack` operation. */
 export interface PersonhoodAckOpParams {
@@ -76,7 +77,7 @@ export class PersonhoodAckReceiveParticipant implements Participant {
       const params = op.params as unknown as PersonhoodAckOpParams;
       const remoteDid = params?.fromDid ?? params?.remoteDid;
       if (!remoteDid) {
-        console.warn(`[personhood-ack] prepare rejected for tx ${txId.slice(0, 8)}: no sender DID`);
+        logger.warn(`[personhood-ack] prepare rejected for tx ${txId.slice(0, 8)}: no sender DID`);
         return 'no';
       }
       try {
@@ -85,9 +86,9 @@ export class PersonhoodAckReceiveParticipant implements Participant {
         const session = await this.ceremonyStore.ensureSession(this.localDid, remoteDid);
         await this.ceremonyStore.setRemoteAcked(session.sessionId);
         ackedFrom = remoteDid;
-        console.log(`[personhood-ack] recorded personhood ack from ${remoteDid.slice(0, 12)}...`);
+        logger.info(`[personhood-ack] recorded personhood ack from ${remoteDid.slice(0, 12)}...`);
       } catch (err) {
-        console.error(`[personhood-ack] prepare failed for tx ${txId.slice(0, 8)}:`, (err as Error)?.message);
+        logger.error(`[personhood-ack] prepare failed for tx ${txId.slice(0, 8)}:`, (err as Error)?.message);
         return 'no';
       }
     }
@@ -112,14 +113,14 @@ export class PersonhoodAckReceiveParticipant implements Participant {
     );
     const remoteDid = this.pendingAcks.get(txId);
     this.pendingAcks.delete(txId);
-    console.log(`[personhood-ack] ${txId.slice(0, 8)} committed`);
+    logger.info(`[personhood-ack] ${txId.slice(0, 8)} committed`);
     // Durably committed → tell the UI layer (prompt the local user if they have
     // not pressed yet, and push the change to the browser).
     if (remoteDid && this.onAck) {
       try {
         this.onAck(remoteDid);
       } catch (err) {
-        console.error('[personhood-ack] onAck handler error:', (err as Error)?.message ?? err);
+        logger.error('[personhood-ack] onAck handler error:', (err as Error)?.message ?? err);
       }
     }
   }
@@ -136,7 +137,7 @@ export class PersonhoodAckReceiveParticipant implements Participant {
         const session = await this.ceremonyStore.getByPair(this.localDid, remoteDid);
         if (session) await this.ceremonyStore.clearRemoteAcked(session.sessionId);
       } catch (err) {
-        console.error(`[personhood-ack] abort retract failed for tx ${txId.slice(0, 8)}:`, (err as Error)?.message);
+        logger.error(`[personhood-ack] abort retract failed for tx ${txId.slice(0, 8)}:`, (err as Error)?.message);
       }
     }
 
@@ -144,7 +145,7 @@ export class PersonhoodAckReceiveParticipant implements Participant {
       "UPDATE tx_participant_state SET outcome = 'aborted' WHERE tx_id = ? AND pid = ?",
       txId, this.pid,
     );
-    console.log(`[personhood-ack] ${txId.slice(0, 8)} aborted`);
+    logger.info(`[personhood-ack] ${txId.slice(0, 8)} aborted`);
   }
 
   async compensate(txId: string): Promise<void> {

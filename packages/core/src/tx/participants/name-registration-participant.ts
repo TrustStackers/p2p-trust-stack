@@ -35,6 +35,7 @@ import type {
 import type { RotationLogEntry } from '../../did/rotation-types.js';
 import type { DidDocument } from '../../did/types.js';
 import { generateUuid } from '../../db/uuid-helpers.js';
+import { logger } from '../../util/logger.js';
 
 /**
  * Shape of the finalize_rotation operation params.
@@ -105,14 +106,14 @@ export class AgentNameRegistrationParticipant implements Participant {
 
       const params = op.params as unknown as FinalizeRotationParams;
       if (!params || !params.rotationEntry || !params.didDocument) {
-        console.log(`[agent-name-participant] prepare: missing required params`);
+        logger.info(`[agent-name-participant] prepare: missing required params`);
         return 'no';
       }
 
       // Validate the rotation entry has the expected structure
       const entry = params.rotationEntry;
       if (!entry.digest || !entry.signature || !entry.didDocument) {
-        console.log(`[agent-name-participant] prepare: rotation entry missing digest/signature/document`);
+        logger.info(`[agent-name-participant] prepare: rotation entry missing digest/signature/document`);
         return 'no';
       }
 
@@ -120,14 +121,14 @@ export class AgentNameRegistrationParticipant implements Participant {
       const nameUri = `vta:${params.namespace}:${params.name}`;
       const alsoKnownAs = entry.didDocument.alsoKnownAs ?? [];
       if (!alsoKnownAs.includes(nameUri)) {
-        console.log(
+        logger.info(
           `[agent-name-participant] prepare: name '${nameUri}' not found in ` +
           `rotation entry's alsoKnownAs`,
         );
         return 'no';
       }
 
-      console.log(
+      logger.info(
         `[agent-name-participant] prepare: rotation entry valid ` +
         `(version ${entry.version}, name '${nameUri}' in alsoKnownAs)`,
       );
@@ -151,7 +152,7 @@ export class AgentNameRegistrationParticipant implements Participant {
       }
     }
 
-    console.log(`[agent-name-participant] ${txId.slice(0, 8)} prepared → voting yes`);
+    logger.info(`[agent-name-participant] ${txId.slice(0, 8)} prepared → voting yes`);
     return 'yes';
   }
 
@@ -187,7 +188,7 @@ export class AgentNameRegistrationParticipant implements Participant {
           params.rotationDigest = new Uint8Array(params.rotationDigest as any);
         }
       } catch (err) {
-        console.error(
+        logger.error(
           `[agent-name-participant] commit: failed to parse params: ` +
           `${(err as Error).message}`,
         );
@@ -195,7 +196,7 @@ export class AgentNameRegistrationParticipant implements Participant {
     }
 
     if (!params) {
-      console.log(
+      logger.info(
         `[agent-name-participant] commit: no params found for tx ${txId} — ` +
         `skipping finalization`,
       );
@@ -209,7 +210,7 @@ export class AgentNameRegistrationParticipant implements Participant {
     }
 
     try {
-      console.log(
+      logger.info(
         `[agent-name-participant] commit: finalizing rotation entry ` +
         `(version ${params.rotationEntry.version})`,
       );
@@ -219,7 +220,7 @@ export class AgentNameRegistrationParticipant implements Participant {
       //    speculatively and is now being permanently committed.
       const did = params.rotationEntry.didDocument.id!;
       await this.rotationStore.appendEntry(did, params.rotationEntry);
-      console.log(
+      logger.info(
         `[agent-name-participant] ✓ rotation entry written to log ` +
         `(version ${params.rotationEntry.version})`,
       );
@@ -227,7 +228,7 @@ export class AgentNameRegistrationParticipant implements Participant {
       // 2. Notify the agent to update its in-memory identity
       //    (DID document with new alsoKnownAs, service endpoints preserved).
       await this.onFinalize(params);
-      console.log(`[agent-name-participant] ✓ agent identity updated`);
+      logger.info(`[agent-name-participant] ✓ agent identity updated`);
 
       // 3. Cache the name in the local name_registry table.
       const now = Math.floor(Date.now() / 1000);
@@ -246,7 +247,7 @@ export class AgentNameRegistrationParticipant implements Participant {
         now,
         generateUuid(),
       );
-      console.log(`[agent-name-participant] ✓ name cached locally in name_registry`);
+      logger.info(`[agent-name-participant] ✓ name cached locally in name_registry`);
 
       // Mark committed in the coordinator state.
       await this.txDb.run(
@@ -256,9 +257,9 @@ export class AgentNameRegistrationParticipant implements Participant {
         this.pid,
       );
 
-      console.log(`[agent-name-participant] ${txId.slice(0, 8)} committed`);
+      logger.info(`[agent-name-participant] ${txId.slice(0, 8)} committed`);
     } catch (err) {
-      console.error(
+      logger.error(
         `[agent-name-participant] commit error for tx ${txId}:`,
         (err as Error)?.message,
       );
@@ -275,7 +276,7 @@ export class AgentNameRegistrationParticipant implements Participant {
       txId,
       this.pid,
     );
-    console.log(`[agent-name-participant] ${txId.slice(0, 8)} aborted (speculative rotation discarded)`);
+    logger.info(`[agent-name-participant] ${txId.slice(0, 8)} aborted (speculative rotation discarded)`);
   }
 
   async compensate(txId: string): Promise<void> {

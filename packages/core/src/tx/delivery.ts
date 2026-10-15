@@ -22,6 +22,7 @@ import type {
   OutboxState,
   SendReceipt,
 } from './types.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Pluggable interfaces
@@ -130,7 +131,7 @@ export class DurableOutbox {
       this.owner,
     );
 
-    console.log(`[tx-outbox] enqueued ${entryId.slice(0, 8)} → ${destination.slice(0, 12)}...`);
+    logger.info(`[tx-outbox] enqueued ${entryId.slice(0, 8)} → ${destination.slice(0, 12)}...`);
     return this.deliver(entryId);
   }
 
@@ -163,7 +164,7 @@ export class DurableOutbox {
         "UPDATE tx_outbox SET state = 'sent' WHERE entry_id = ?",
         entryId,
       );
-      console.log(`[tx-outbox] ${entryId.slice(0, 8)} accepted by next hop`);
+      logger.info(`[tx-outbox] ${entryId.slice(0, 8)} accepted by next hop`);
       return { status: 'accepted', entryId };
     }
 
@@ -171,7 +172,7 @@ export class DurableOutbox {
       "UPDATE tx_outbox SET state = 'failed' WHERE entry_id = ?",
       entryId,
     );
-    console.log(`[tx-outbox] ${entryId.slice(0, 8)} failed (attempt ${newAttempts})`);
+    logger.info(`[tx-outbox] ${entryId.slice(0, 8)} failed (attempt ${newAttempts})`);
     return { status: 'unconfirmed', entryId };
   }
 
@@ -197,7 +198,7 @@ export class DurableOutbox {
       this.owner,
     );
     if (rows.length > 0) {
-      console.log(`[tx-outbox] draining ${rows.length} undelivered entry(s)`);
+      logger.info(`[tx-outbox] draining ${rows.length} undelivered entry(s)`);
     }
     for (const row of rows) {
       await this.deliver(row.entry_id);
@@ -318,7 +319,7 @@ export class DurableInbox {
     );
     if (existing) {
       if (!comparesEqual(existing.payload_digest, opts.fingerprint)) {
-        console.warn(
+        logger.warn(
           `[tx-inbox] CONFLICT ${idempotencyKey.slice(0, 8)}: a different document arrived under a key ` +
           'already delivered — not re-applied, not acknowledged',
         );
@@ -336,7 +337,7 @@ export class DurableInbox {
       opts.fingerprint ?? null,
     );
 
-    console.log(`[tx-inbox] delivering ${idempotencyKey.slice(0, 8)} (first delivery)`);
+    logger.info(`[tx-inbox] delivering ${idempotencyKey.slice(0, 8)} (first delivery)`);
     await this.handler(payload);
 
     return { idempotencyKey, deliveredAt };
@@ -372,7 +373,7 @@ export class DurableInbox {
     if (existing) {
       const sameDocument = comparesEqual(existing.payload_digest, opts.fingerprint);
       if (!sameDocument) {
-        console.warn(
+        logger.warn(
           `[tx-inbox] CONFLICT ${idempotencyKey.slice(0, 8)}: a different document arrived under a ` +
           `key already delivered at ${existing.delivered_at} — not re-applied, not acknowledged`,
         );
@@ -389,7 +390,7 @@ export class DurableInbox {
       opts.fingerprint ?? null,
     );
 
-    console.log(`[tx-inbox] delivering ${idempotencyKey.slice(0, 8)} (first delivery)`);
+    logger.info(`[tx-inbox] delivering ${idempotencyKey.slice(0, 8)} (first delivery)`);
     return { duplicate: false, conflict: false, result: await run() };
   }
 

@@ -17,6 +17,7 @@ import { Transaction } from './transaction.js';
 import { TransactionCoordinator } from './coordinator.js';
 import { CompensationExecutor } from './compensation.js';
 import type { Participant, StatusEvent, TransactionResult } from './types.js';
+import { logger } from '../util/logger.js';
 
 export class TransactionManager {
   private readonly coordinator: TransactionCoordinator;
@@ -52,7 +53,7 @@ export class TransactionManager {
       await fn(tx);
       return await tx.commit();
     } catch (err) {
-      console.error(`[tx-manager] transaction failed: ${(err as Error)?.message ?? err}`);
+      logger.error(`[tx-manager] transaction failed: ${(err as Error)?.message ?? err}`);
       await tx.abort();
       throw err;
     }

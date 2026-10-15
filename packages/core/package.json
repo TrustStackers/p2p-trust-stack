@@ -48,7 +48,8 @@
     "test:e2e": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/relationship/e2e-direct-mode.test.ts test/relationship/e2e-large-payload.test.ts",
     "test:ceremony-store": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/relationship/ceremony-store.test.ts",
     "test:vtc": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/vtc/codec.test.ts test/vtc/vtc.test.ts test/vtc/store.test.ts test/vtc/encoded-vid-guard.test.ts",
-    "test:rotation": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/did/rotation-codec.test.ts test/did/witness-attestation.test.ts test/did/rotation-log-store.test.ts"
+    "test:rotation": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/did/rotation-codec.test.ts test/did/witness-attestation.test.ts test/did/rotation-log-store.test.ts",
+    "test:config": "node --conditions=development --experimental-strip-types --loader ./test-loader.mjs --test test/config/bootstrap-env.test.ts"
   },
   "keywords": [
     "p2pts",
@@ -66,6 +67,7 @@
     "@hpke/core": "^1.9.0",
     "@hpke/dhkem-x25519": "^1.8.0",
     "@libp2p/circuit-relay-v2": "^4.2.8",
+    "@libp2p/crypto": "^5.1.21",
     "@libp2p/peer-id": "^6.0.11",
     "@libp2p/utils": "^7.2.3",
     "@multiformats/multiaddr": "^13.0.3",

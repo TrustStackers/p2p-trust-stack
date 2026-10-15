@@ -62,6 +62,7 @@ import { decodeOobi, verifyOobiSignature } from './oobi.js';
 import { RelationshipStore } from './store.js';
 import type { LocalIdentity, OobiPayload, RelationshipRecord } from './types.js';
 import { extractEd25519PublicKey, extractMlDsa65PublicKey } from './key-extract.js';
+import { logger } from '../util/logger.js';
 
 
 // ---------------------------------------------------------------------------
@@ -110,7 +111,7 @@ function resolveOobiSignaturePolicy(explicit?: OobiSignaturePolicy): OobiSignatu
   const raw = (process.env[OOBI_SIGNATURE_POLICY_ENV] ?? '').trim().toLowerCase();
   if (raw === 'off' || raw === 'warn' || raw === 'enforce') return raw;
   if (raw) {
-    console.warn(
+    logger.warn(
       `[RM] ${OOBI_SIGNATURE_POLICY_ENV}="${raw}" is not one of off|warn|enforce — using "warn"`,
     );
   }
@@ -169,7 +170,7 @@ export class RelationshipManager {
     this.oobiSignaturePolicy = resolveOobiSignaturePolicy(params.oobiSignaturePolicy);
     this.resolvePeerDocument = params.resolvePeerDocument;
     // State the active policy once, so the mode is never ambiguous in a log.
-    console.log(
+    logger.info(
       `[RM] OOBI introduction integrity policy: ${this.oobiSignaturePolicy}` +
       (this.oobiSignaturePolicy === 'warn'
         ? ' (reported, not enforced — set ' + OOBI_SIGNATURE_POLICY_ENV + '=enforce to refuse bad introductions)'
@@ -196,7 +197,7 @@ export class RelationshipManager {
     this.transport.onMessage((message, fromAddr) => {
       // Fire-and-forget: errors are logged but not propagated to the transport.
       this.handleMessage(message, fromAddr).catch((err: unknown) => {
-        console.error('[RelationshipManager] handleMessage error:', err);
+        logger.error('[RelationshipManager] handleMessage error:', err);
       });
     });
   }
@@ -353,7 +354,7 @@ export class RelationshipManager {
     const verdict = await this.checkOobiIntroductionIntegrity(oobi);
 
     if (verdict.ok) {
-      console.log(`[RM:sendRfi] ✓ OOBI introduction ${verdict.detail}`);
+      logger.info(`[RM:sendRfi] ✓ OOBI introduction ${verdict.detail}`);
       return;
     }
 
@@ -368,8 +369,8 @@ export class RelationshipManager {
         `Set the policy to "warn" to connect anyway.`,
       );
     }
-    if (loud) console.error(line);
-    else console.warn(line);
+    if (loud) logger.error(line);
+    else logger.warn(line);
   }
 
 
@@ -508,7 +509,7 @@ export class RelationshipManager {
       payloadType = peek.payloadType;
       senderDidDocument = peek.didDocument;
       vidSenderFromPeek = peek.vidSender;
-      console.log(`[RM:handleMessage] ← type=${payloadType} fromPeerId=${fromAddr.peerId?.slice(0,12) ?? 'none'} msgLen=${message.length}`);
+      logger.info(`[RM:handleMessage] ← type=${payloadType} fromPeerId=${fromAddr.peerId?.slice(0,12) ?? 'none'} msgLen=${message.length}`);
 
       if (payloadType === 'TSP_GEN' || payloadType === 'TSP_GEN_CONFIDENTIAL') {
         // Step 6/7: dispatch TSP_GEN and TSP_GEN_CONFIDENTIAL to processGen() using the relationship table.
@@ -526,14 +527,14 @@ export class RelationshipManager {
       }
 
       if (!senderDidDocument) {
-        console.warn('[RelationshipManager] received RFI/RFA without didDocument, ignoring');
+        logger.warn('[RelationshipManager] received RFI/RFA without didDocument, ignoring');
         return;
       }
 
       // Extract the sender's Ed25519 public key from the inlined didDocument.
       senderPublicKey = extractEd25519PublicKey(senderDidDocument);
     } catch (err) {
-      console.warn('[RelationshipManager] failed to peek payload type:', err);
+      logger.warn('[RelationshipManager] failed to peek payload type:', err);
       return;
     }
 
@@ -542,7 +543,7 @@ export class RelationshipManager {
     try {
       envelope = tspOpen({ message, senderPublicKey });
     } catch (err) {
-      console.warn('[RelationshipManager] tspOpen failed:', err);
+      logger.warn('[RelationshipManager] tspOpen failed:', err);
       return;
     }
 
@@ -562,7 +563,7 @@ export class RelationshipManager {
       // Narrow to the RFI payload so the decline can carry the offending
       // digest (the union is not narrowed by a runtime flag).
       const rfiPayload = envelope.payload.type === 'TSP_RFI' ? envelope.payload : undefined;
-      console.error(
+      logger.error(
         `[RM:handleMessage] REJECT ${bindingCheck.reason} (${bindingCheck.detail}) ` +
         `type=${envelope.payload.type} fromPeerId=${fromAddr.peerId?.slice(0, 12) ?? 'none'}` +
         (rfiPayload ? ' → declining with XRFD' : ' — accept ignored, relationship NOT established'),
@@ -585,11 +586,11 @@ export class RelationshipManager {
       try {
         const isValid = await this.didMethod.verify(senderDidDocument.id!);
         if (!isValid) {
-          console.warn('[RelationshipManager] didMethod.verify returned false, ignoring message');
+          logger.warn('[RelationshipManager] didMethod.verify returned false, ignoring message');
           return;
         }
       } catch (err) {
-        console.warn('[RelationshipManager] didMethod.verify failed:', err);
+        logger.warn('[RelationshipManager] didMethod.verify failed:', err);
 
         return;
       }
@@ -630,7 +631,7 @@ export class RelationshipManager {
       receiverVid,
     });
     if (!rfiCheck.ok) {
-      console.error(
+      logger.error(
         `[RM:processRfi] REJECT ${rfiCheck.reason} (${rfiCheck.detail}) ` +
         `from=${vidSender.slice(0, 24)}... → declining with XRFD`,
       );
@@ -743,13 +744,13 @@ export class RelationshipManager {
 
      const record = this.store.get(this.identity.did, remoteDid);
      if (!record || record.direction !== 'bidirectional') {
-       console.warn(`[RM:sendConfidential] FAIL: no bidirectional relationship with ${didShort}...`);
+       logger.warn(`[RM:sendConfidential] FAIL: no bidirectional relationship with ${didShort}...`);
        throw new Error(
          `RelationshipManager.sendConfidentialMessage: no bidirectional relationship with ${didShort}...`,
        );
      }
      if (!record.remoteX25519Key) {
-       console.warn(`[RM:sendConfidential] FAIL: no remoteX25519Key for ${didShort}...`);
+       logger.warn(`[RM:sendConfidential] FAIL: no remoteX25519Key for ${didShort}...`);
        throw new Error(
          `RelationshipManager.sendConfidentialMessage: no remoteX25519Key stored for ${didShort}...`,
        );
@@ -767,7 +768,7 @@ export class RelationshipManager {
            TSP_HPKE_INFO,
            aad,
          );
-     console.log(
+     logger.info(
        `[RM:sendConfidential] → ${remoteDid.slice(0, 12)}… sealed with the ` +
        `${record.remoteHybridKemKey ? 'MLKEM768-X25519 hybrid' : 'DHKEM(X25519) classical'} KEM (enc=${enc.length}B)`,
      );
@@ -792,7 +793,7 @@ export class RelationshipManager {
       const record = this.store.get(this.identity.did, remoteDid);
       if (!record || record.direction !== 'bidirectional') {
         const err = `RelationshipManager.sendMessage: no bidirectional relationship with ${didShort}...`;
-        console.warn(`[RM:sendMessage] FAIL: ${err}`);
+        logger.warn(`[RM:sendMessage] FAIL: ${err}`);
         throw new Error(err);
       }
 
@@ -802,7 +803,7 @@ export class RelationshipManager {
         payload: { type: 'TSP_GEN', body },
         signingSecretKey: this.identity.signingKeyPair.secretKey,
       });
-      console.log(
+      logger.info(
         `[RM:sendMessage] signing pubKey=${Buffer.from(this.identity.signingKeyPair.publicKey).toString('hex')} ` +
         `localDid=${this.identity.did.slice(0, 24)}... → ${didShort}...`,
       );
@@ -908,7 +909,7 @@ export class RelationshipManager {
 
      const addrs = transportAddr.multiaddrs?.join(', ') ?? 'none';
      const isConn = this.transport.isConnected?.(stored.peerId) ?? true; // default true if method absent
-     console.log(`[RM:sendDirect] → ${didShort}... peerId=${(stored.peerId ?? 'none').slice(0,12)}... addrs=[${addrs}] isConnected=${isConn} sealedBytes=${sealed.length}`);
+     logger.info(`[RM:sendDirect] → ${didShort}... peerId=${(stored.peerId ?? 'none').slice(0,12)}... addrs=[${addrs}] isConnected=${isConn} sealedBytes=${sealed.length}`);
 
      await this.transport.send(sealed, transportAddr);
    }
@@ -953,13 +954,13 @@ export class RelationshipManager {
     // the keys table (lookupByVid in `get`).
     const record = this.store.get(this.identity.did, vidSender);
     if (!record || record.direction !== 'bidirectional') {
-      console.warn(
+      logger.warn(
         `[RelationshipManager] processGen: no bidirectional relationship for ${vidSender.slice(0, 12)}...`,
       );
       return;
     }
     if (!record.remoteEd25519Key) {
-      console.warn(
+      logger.warn(
       );
       return;
     }
@@ -1015,14 +1016,14 @@ export class RelationshipManager {
         expectHybrid,
       });
       if (!opened) {
-        console.warn(
+        logger.warn(
           `[RM:processGen] could not decrypt a confidential message from ${vidSender.slice(0, 12)}… ` +
           `with either KEM (peer publishes #key-kem: ${expectHybrid})`,
         );
         return;
       }
       if (opened.mismatch) {
-        console.warn(
+        logger.warn(
           `[RM:processGen] confidential message from ${vidSender.slice(0, 12)}… opened with the ${opened.used} ` +
           `KEM although ${expectHybrid ? 'hybrid' : 'classical'} was expected — the stored peer keys ` +
           `are stale; they are re-read on the next handshake`,
@@ -1033,7 +1034,7 @@ export class RelationshipManager {
     }
 
     // Should not happen — peekPayloadType already confirmed TSP_GEN.
-    console.warn('[RelationshipManager] processGen: unexpected payload type after tspOpen');
+    logger.warn('[RelationshipManager] processGen: unexpected payload type after tspOpen');
   }
 
   // ---------------------------------------------------------------------------
@@ -1058,7 +1059,7 @@ export class RelationshipManager {
       return;
     }
     if (!existing.rfiDigest) {
-      console.warn('[RelationshipManager] received RFA but no RFI digest on record, ignoring');
+      logger.warn('[RelationshipManager] received RFA but no RFI digest on record, ignoring');
       return;
     }
 
@@ -1076,7 +1077,7 @@ export class RelationshipManager {
       receiverVid,
     });
     if (!rfaCheck.ok) {
-      console.error(
+      logger.error(
         `[RM:processRfa] REJECT ${rfaCheck.reason} (${rfaCheck.detail}) ` +
         `from=${vidSender.slice(0, 24)}... — accept ignored, relationship NOT established`,
       );
@@ -1133,9 +1134,9 @@ export class RelationshipManager {
         signingSecretKey: this.identity.signingKeyPair.secretKey,
       });
       await this.transport.send(sealed, toAddr);
-      console.log(`[RM:declineInvite] → XRFD sent to ${remoteDid.slice(0, 24)}... (declined=${Buffer.from(declinedDigest.subarray(0, 8)).toString('hex')})`);
+      logger.info(`[RM:declineInvite] → XRFD sent to ${remoteDid.slice(0, 24)}... (declined=${Buffer.from(declinedDigest.subarray(0, 8)).toString('hex')})`);
     } catch (err) {
-      console.warn(`[RM:declineInvite] failed to send XRFD: ${(err as Error)?.message ?? err}`);
+      logger.warn(`[RM:declineInvite] failed to send XRFD: ${(err as Error)?.message ?? err}`);
     }
   }
 
@@ -1175,7 +1176,7 @@ export class RelationshipManager {
         tspOpen({ message, senderPublicKey: record.remoteEd25519Key });
         authenticated = 'verified';
       } catch (err) {
-        console.error(
+        logger.error(
           `[RM:processRfd] ignoring XRFD from ${vidSender.slice(0, 24)}...: ` +
           `signature verification failed (${(err as Error)?.message ?? err})`,
         );
@@ -1184,7 +1185,7 @@ export class RelationshipManager {
     }
 
     const rejected = this.store.markRejected(this.identity.did, vidSender);
-    console.error(
+    logger.error(
       `[RM:processRfd] peer DECLINED our invite (${authenticated}) from=${vidSender.slice(0, 24)}... ` +
       `fromPeerId=${fromAddr.peerId?.slice(0, 12) ?? 'none'} ` +
       `declined=${declinedDigest ? Buffer.from(declinedDigest.subarray(0, 8)).toString('hex') : 'none'} ` +

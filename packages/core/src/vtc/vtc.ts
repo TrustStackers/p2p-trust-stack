@@ -28,6 +28,7 @@ import type {
   VtcGovernanceDoc,
   VtcIdentity,
 } from './types.js';
+import { logger } from '../util/logger.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -80,7 +81,7 @@ export interface CreateVtcParams {
 export async function createVtc(params: CreateVtcParams): Promise<VtcIdentity> {
   const { name, founders, threshold, allowedClaimTypes } = params;
   const didMethod = params.didMethod ?? new DidPeer4Method();
-  console.log(
+  logger.info(
     `[vtc:create] minting VTC '${name ?? '(unnamed)'}' ` +
     `(signers=${founders.length}${params.listedAdmins?.length ? `, listedAdmins=${params.listedAdmins.length}` : ''}, threshold=${threshold})`,
   );
@@ -104,7 +105,7 @@ export async function createVtc(params: CreateVtcParams): Promise<VtcIdentity> {
     );
   }
   if (founders.length < threshold) {
-    console.warn(
+    logger.warn(
       `[vtc:create] bootstrapping VTC '${name}': ${founders.length} signer(s) with threshold ${threshold}; ` +
       `${adminVids.length - founders.length} listed co-admin(s) not co-signing at genesis`,
     );
@@ -133,7 +134,7 @@ export async function createVtc(params: CreateVtcParams): Promise<VtcIdentity> {
     signature: signEd25519(digest, founder.signingKeyPair.secretKey),
   }));
 
-  console.log(`[vtc:create] governance doc signed: did=${result.did}, digest=${digest.slice(0, 16)}..., admins=${adminVids.length}, signatures=${signatures.length}`);
+  logger.info(`[vtc:create] governance doc signed: did=${result.did}, digest=${digest.slice(0, 16)}..., admins=${adminVids.length}, signatures=${signatures.length}`);
 
   const governanceDoc: VtcGovernanceDoc = {
     ...unsignedDoc,

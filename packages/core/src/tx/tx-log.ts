@@ -13,6 +13,7 @@
 
 import type { LogEntry } from './types.js';
 import type { LogSink } from './tx-log-sink.js';
+import { logger } from '../util/logger.js';
 
 /**
  * A transaction log. `append` is ordered; `read` returns the ordered sequence
@@ -35,7 +36,7 @@ export class TransactionLog {
       payload,
     };
     await this.sink.append(entry);
-    console.log(`[tx-log] ${txId.slice(0, 8)} seq=${entry.seq} ${event}${payload ? ' payload=' + JSON.stringify(payload).slice(0, 80) : ''}`);
+    logger.debug(`[tx-log] ${txId.slice(0, 8)} seq=${entry.seq} ${event}${payload ? ' payload=' + JSON.stringify(payload).slice(0, 80) : ''}`);
     return entry.seq;
   }
 
