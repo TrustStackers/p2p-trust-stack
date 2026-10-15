@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Agent Transaction Coordinator Bootstrap — initializes the transaction
  * coordination layer for an agent app.

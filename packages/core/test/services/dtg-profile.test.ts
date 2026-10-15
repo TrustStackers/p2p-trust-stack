@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * F-002 — a VEC and a VWC are v1.0 statement-credential *profiles*, not types.
  *

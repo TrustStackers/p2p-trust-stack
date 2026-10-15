@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * DID-related types for did:peer:4 VID creation (Step 2).
  */

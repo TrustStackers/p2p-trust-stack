@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * RelationshipStore — SQLite-backed relationship records backed by the shared
  * P2PTS migration table `relationships` (migration 0005).

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * SpeculativeRotationService — computes a rotation entry with a name in
  * alsoKnownAs WITHOUT persisting it to the rotation log store.

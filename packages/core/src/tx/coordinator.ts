@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * TransactionCoordinator — orchestrates N participants through a two-phase
  * commit with a durable decision and crash recovery.

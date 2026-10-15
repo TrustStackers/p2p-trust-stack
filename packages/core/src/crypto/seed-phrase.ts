@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * SeedPhrase — BIP-39-compatible mnemonic encoding for cross-device
  * VTA root keypair transfer (Phase 2.2).

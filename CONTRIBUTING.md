@@ -10,10 +10,11 @@ API, which depends on `core`).
 
 ## Before you start: sign the CLA
 
-All contributions require a signed [Contributor License Agreement](./CLA.md).
-This lets the project stay dual-licensed (GPL-3.0 + commercial). Opening a
-pull request constitutes your acceptance of the CLA. A CLA bot will also gate
-every PR.
+All contributions are accepted only under the [Contributor License
+Agreement](./CLA.md). This lets the project stay dual-licensed (GPL-3.0-only +
+commercial). Opening a pull request constitutes your acceptance of the CLA. The
+requirement is enforced on every PR (currently by maintainer review; an
+automated CLA check will be added).
 
 ## Dependency policy (hard rule)
 

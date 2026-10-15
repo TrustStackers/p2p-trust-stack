@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0016_name_registry: Namespace-scoped human-readable name → DID mapping.
 --
 -- Managed by the utility server's name resolver. Agents claim names

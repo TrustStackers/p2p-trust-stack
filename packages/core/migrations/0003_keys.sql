@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0003_keys.sql
 -- Key material — only ever populated for identities with custody='local';
 -- encrypted_secret_key is NULL for remotely-pushed identities (public_key only).

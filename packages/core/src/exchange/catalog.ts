@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * RecordSet catalog — the single source of truth for "what data moves, to whom,
  * and how". A static TS registry so `materialize` closures type-check; a JSON

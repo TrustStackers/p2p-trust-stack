@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * H7 / decision D-4a — inbound 2PC dedup keyed on `(txId, messageId)`.
  *

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * VTC Receive Participant — agent-side participant that receives VTC data
  * pushed from the utility server and persists it to the agent's local SQLite.

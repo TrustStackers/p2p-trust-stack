@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0009_credentials_and_signatures.sql
 -- The VC layer: vmc/vec/vrc/custom_endorsement mirror OpenVTC's four VC
 -- types for interop; 'delegation' is a fifth, P2PTS-specific extension.

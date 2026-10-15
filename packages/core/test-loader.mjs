@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Custom ESM loader that rewrites .js imports to .ts when the .js file
  * doesn't exist but the .ts file does. This lets Node's --experimental-strip-types

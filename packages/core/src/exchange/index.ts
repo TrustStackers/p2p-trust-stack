@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Computed Record Exchange (CRE) — public exports.
  * Design reference: docs/05_CRE-SystemDesign.md.

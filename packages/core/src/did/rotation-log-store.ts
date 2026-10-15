@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * RotationLogStore — key rotation history persistence using the shared
  * P2PTS migration table `rotation_log` (0004).

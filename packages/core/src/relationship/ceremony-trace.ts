@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * CeremonyTrace — focused tracing for the OOBI→RFI→RFA→bidirectional flow.
  * Emits concise, structured log lines marked [CEREMONY] so they stand out.

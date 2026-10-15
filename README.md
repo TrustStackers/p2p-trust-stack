@@ -153,9 +153,10 @@ npm run verify       # typecheck + test + smoke:pack
 
 ## License
 
-**Dual-licensed.** See [LICENSE](./LICENSE) (GPL-3.0) or
-[COMMERCIAL-LICENSE-OUTLINE.md](./COMMERCIAL-LICENSE-OUTLINE.md) for the commercial
-alternative. See [NOTICE](./NOTICE) for third-party attribution.
+**Dual-licensed.** Use the stack under **GPL-3.0-only** — see [LICENSE](./LICENSE) —
+or under a commercial license — see [COMMERCIAL-LICENSE.md](./COMMERCIAL-LICENSE.md).
+See [NOTICE](./NOTICE) for the license-reference declaration, third-party
+attribution, and trademark terms.
 
 ## Contributing
 

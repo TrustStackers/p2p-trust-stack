@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * PersonhoodAckReceiveParticipant — agent-side participant that receives a
  * peer's personhood acknowledgment ("I know this person") for a ceremony and

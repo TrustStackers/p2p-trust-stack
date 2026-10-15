@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * GovernanceChangeStore — durable CRUD for `governance_change_proposals` and
  * `governance_change_approvals` in tx-coordinator.db (mirrors `CeremonyStore`).

@@ -34,9 +34,10 @@ Examples of unacceptable behavior:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers. All complaints will be reviewed and
-investigated promptly and fairly. All community leaders are obligated to
-respect the privacy and security of the reporter of any incident.
+reported to the project maintainers at **conduct@truststackers.com**. All
+complaints will be reviewed and investigated promptly and fairly. All community
+leaders are obligated to respect the privacy and security of the reporter of any
+incident.
 
 ## Attribution
 

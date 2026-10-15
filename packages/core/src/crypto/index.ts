@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 // Crypto primitives
 export type { Ed25519KeyPair, X25519KeyPair, HpkeKeyPair } from './primitives.js';
 export {

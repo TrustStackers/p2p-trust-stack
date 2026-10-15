@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * CeremonyCoordinator — server-side orchestrator for multi-admin VTC/VTN
  * founding ceremonies (Phase 3).

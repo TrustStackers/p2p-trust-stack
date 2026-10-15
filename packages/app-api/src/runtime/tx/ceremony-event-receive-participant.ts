@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * CeremonyEventReceiveParticipant — agent-side participant for the server's ceremony-PROGRESS nudge
  * (`exchange:ceremony-event`).

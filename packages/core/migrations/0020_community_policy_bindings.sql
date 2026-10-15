@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0020_community_policy_bindings.sql
 -- Two-tier modular policy — Phase A, Tier 2: `community_policy_bindings` —
 -- per-community application of a catalog rule template (which rules apply, their

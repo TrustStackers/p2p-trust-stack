@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0011_nonces.sql
 -- Replay protection — local only, never replicated.
 -- identity_uuid added for distributed reference consistency.

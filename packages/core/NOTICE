@@ -1,0 +1,62 @@
+P2P Trust Stack — @p2p-trust-stack/core and @p2p-trust-stack/app-api
+Copyright (C) 2026 Trust Stackers
+
+Dual licensing
+--------------
+This product is dual-licensed. You may use, copy, modify, and distribute it
+under the terms of the GNU General Public License, version 3 only
+(GPL-3.0-only), a copy of which is included in the LICENSE file. No "or any
+later version" option is granted.
+
+Alternatively, a separate commercial license is available from Trust Stackers
+for use cases where GPL-3.0 obligations (copyleft, source disclosure) are not
+acceptable. See COMMERCIAL-LICENSE.md, or contact licensing@truststackers.com.
+
+License reference
+-----------------
+"LicenseRef-TrustStackers-Commercial" is a local SPDX license reference defined
+by this Project. It denotes the commercial license terms in
+COMMERCIAL-LICENSE.md, granted under a separate Order Form.
+
+Copyright and attribution notices
+---------------------------------
+Under GPL-3.0 section 7(b), the copyright and attribution notices in this
+project (including this NOTICE and the notices in the source files) must be
+preserved in redistributions.
+
+No trademark grant
+------------------
+Nothing in this project grants any right to use the "Trust Stackers" name,
+logo, or the "P2P Trust Stack" mark. As an additional term under GPL-3.0
+section 7(e), the licensors decline to grant rights under trademark law for
+these trade names, trademarks, and service marks. Trademark use requires a
+separate written agreement.
+
+Third-party notices
+-------------------
+This product includes software developed by third parties under permissive
+licenses (MIT and/or Apache-2.0). Full texts are available in the respective
+packages; the SPDX identifiers are listed below:
+
+- @hpke/core, @hpke/common, @hpke/dhkem-x25519, @hpke/chacha20poly1305 — MIT
+- @noble/curves, @noble/hashes, @noble/post-quantum — MIT
+- @node-rs/argon2 — MIT
+- canonicalize — MIT
+- cesr — MIT
+- uuid — MIT
+- multiformats, @multiformats/multiaddr — MIT OR Apache-2.0
+- @libp2p/peer-id, @libp2p/utils, @libp2p/interface, @libp2p/circuit-relay-v2,
+  @libp2p/crypto, @libp2p/identify, @libp2p/ping, @libp2p/tcp,
+  @libp2p/websockets — Apache-2.0
+- @chainsafe/libp2p-noise, @chainsafe/libp2p-yamux — Apache-2.0
+- libp2p — Apache-2.0
+
+Apache-2.0 components:
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use these files except in compliance with the License.
+  You may obtain a copy of the License at
+  http://www.apache.org/licenses/LICENSE-2.0
+
+All third-party components are permissively licensed and compatible with
+GPL-3.0. No copyleft-licensed third-party code may be added to this project
+(see CONTRIBUTING.md, "Dependency policy").

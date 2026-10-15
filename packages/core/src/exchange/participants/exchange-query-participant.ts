@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * ExchangeQueryParticipant — server-side read-only participant that answers
  * `exchange:<name>` queries by dispatching to the RecordSet catalog: materialize

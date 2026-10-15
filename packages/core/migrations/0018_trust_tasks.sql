@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0018_trust_tasks.sql
 -- Persisted record of a Trust Task document (the P5 bridge envelope).
 --

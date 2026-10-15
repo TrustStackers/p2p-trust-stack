@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * VtcStore — VTC governance + VRC credential persistence using the shared
  * P2PTS migration tables `governance` (0007) and `credentials` (0009).

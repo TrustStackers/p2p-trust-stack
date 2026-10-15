@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0019_trust_task_catalog.sql
 -- The authoritative catalog of trust-task STEP and CEREMONY definitions.
 --

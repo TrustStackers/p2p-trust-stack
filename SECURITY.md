@@ -11,7 +11,7 @@ Instead, report it privately:
 
 - **GitHub Security Advisories:** use the "Report a vulnerability" button on the
   Security tab of the repository (preferred).
-- **Email:** security@truststackers.example (TODO: real address + PGP key).
+- **Email:** security@truststackers.com
 
 Please include:
 
@@ -42,3 +42,10 @@ appropriate public disclosure timeline.
 
 This project is pre-1.0 and has not undergone a third-party security audit.
 Do not rely on it for production security until an audit has been completed.
+
+## Export notice
+
+This project includes cryptographic functionality and is subject to export
+control laws, including the U.S. Export Administration Regulations. Published
+source code generally qualifies for the "publicly available" exception; users
+are responsible for their own compliance.

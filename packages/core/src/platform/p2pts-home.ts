@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * P2PTS_HOME — platform-aware resolution of the user-level data directory
  * for the P2P Trust Stack.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Tests for HPKE-Base over the MLKEM768-X25519 hybrid KEM (G7f, confidential).
  *

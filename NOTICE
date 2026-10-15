@@ -2,21 +2,35 @@ P2P Trust Stack — @p2p-trust-stack/core and @p2p-trust-stack/app-api
 Copyright (C) 2026 Trust Stackers
 
 Dual licensing
----------------
+--------------
 This product is dual-licensed. You may use, copy, modify, and distribute it
-under the terms of the GNU General Public License, version 3.0 (GPL-3.0), a
-copy of which is included in the LICENSE file.
+under the terms of the GNU General Public License, version 3 only
+(GPL-3.0-only), a copy of which is included in the LICENSE file. No "or any
+later version" option is granted.
 
 Alternatively, a separate commercial license is available from Trust Stackers
 for use cases where GPL-3.0 obligations (copyleft, source disclosure) are not
-acceptable. Contact licensing@truststackers.example (TODO: real address) or see
-COMMERCIAL-LICENSE-OUTLINE.md for the terms outline.
+acceptable. See COMMERCIAL-LICENSE.md, or contact licensing@truststackers.com.
+
+License reference
+-----------------
+"LicenseRef-TrustStackers-Commercial" is a local SPDX license reference defined
+by this Project. It denotes the commercial license terms in
+COMMERCIAL-LICENSE.md, granted under a separate Order Form.
+
+Copyright and attribution notices
+---------------------------------
+Under GPL-3.0 section 7(b), the copyright and attribution notices in this
+project (including this NOTICE and the notices in the source files) must be
+preserved in redistributions.
 
 No trademark grant
 ------------------
 Nothing in this project grants any right to use the "Trust Stackers" name,
-logo, or the "P2P Trust Stack" mark. Trademark use requires a separate
-written agreement.
+logo, or the "P2P Trust Stack" mark. As an additional term under GPL-3.0
+section 7(e), the licensors decline to grant rights under trademark law for
+these trade names, trademarks, and service marks. Trademark use requires a
+separate written agreement.
 
 Third-party notices
 -------------------

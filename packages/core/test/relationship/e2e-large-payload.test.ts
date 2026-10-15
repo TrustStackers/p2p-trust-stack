@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * End-to-end LARGE-PAYLOAD tests — the regression guard for the `--E#####`
  * Big-counter outage class.

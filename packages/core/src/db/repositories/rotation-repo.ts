@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Repository: rotation_log + witness_attestations tables (uuid-first, 0018).
  * Both tables now key by `uuid` (UUIDv7); FK targets are the `*_uuid` columns.

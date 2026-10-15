@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Exchange watermark — per (recordSet, peer) last-synced-at tracking in the
  * per-node tx-coordinator.db (`exchange_watermark` table, added in Phase 0).

@@ -79,5 +79,5 @@ unclassified method — is refused.
 
 ## License
 
-Dual-licensed under **GPL-3.0** or a commercial license — see the repository's `LICENSE`
-and `NOTICE`, and `COMMERCIAL-LICENSE-OUTLINE.md` for the commercial terms.
+Dual-licensed under **GPL-3.0-only** or a commercial license — see the repository's
+`LICENSE` and `NOTICE`, and `COMMERCIAL-LICENSE.md` for the commercial terms.

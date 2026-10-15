@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0007_governance.sql
 -- Governance parameters per VTC/VTN — exactly one row per community.
 -- admin_threshold_m/n back the M-of-N signature model seen in the VRC/VMC flow.

@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0005_relationships.sql
 -- Direct Layer-2 peer links (libp2p), independent of any VTC/VTN context.
 --

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Operation proofs — audit **F-010**, ruling **R1**: signed operation documents on
  * **cross-node** operations only (the node's own admin surface keeps session authority).

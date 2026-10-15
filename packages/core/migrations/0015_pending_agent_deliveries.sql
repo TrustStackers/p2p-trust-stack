@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0015_pending_agent_deliveries: Generic queue for utility-server-to-agent delivery.
 --
 -- Stores pending data pushes that need to be delivered to agents via the

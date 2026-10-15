@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0008_delegations_and_grants.sql
 -- Accountability/custody links for non-human subjects (delegations), plus
 -- the fast-path authorization index (grants) derived from credentials and

@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0010_status_lists.sql
 -- Bitstring Status List mechanics (OpenVTC-compatible). Reserved indices
 -- 0-3 are decoys, pre-flipped at mint.

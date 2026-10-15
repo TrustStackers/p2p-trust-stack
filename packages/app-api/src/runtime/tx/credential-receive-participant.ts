@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * CredentialReceiveParticipant — agent-side participant that receives minted
  * community-governed credentials (VMC/VEC/VWC/DGT) pushed from the utility

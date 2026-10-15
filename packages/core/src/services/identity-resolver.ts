@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * IdentityResolver — maps the agent's VID/DID string world to the shared
  * migration tables (`identities` + `did_documents`) so that all agent stores

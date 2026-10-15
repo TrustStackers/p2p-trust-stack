@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Regression test — G7WIN11 graph / VTC co-admin checklist showing a CESR VID
  * prefix (e.g. `DK…`) instead of the peer's name after agent99 registers a name

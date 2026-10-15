@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * GovernanceProposalReceiveParticipant — agent-side participant that persists a
  * governance-change proposal pushed from the utility server over the durable

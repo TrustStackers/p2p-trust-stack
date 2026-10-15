@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * The trust-task CATALOG — the parsed shapes of a step and a ceremony, and the
  * CODE-side executor registry.

@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0004_rotation_log_and_witness_attestations.sql
 -- Hash-chained, append-only rotation log per DID document, plus normalized
 -- witness attestations backing a rotation (M-of-N witness quorum support).

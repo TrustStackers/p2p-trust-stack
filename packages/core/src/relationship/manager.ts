@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * RelationshipManager — stateful RFI/RFA orchestrator — Step 4, Tasks 4.2–4.5.
  * Extended in Step 6 with TSP_GEN application-message send/receive.

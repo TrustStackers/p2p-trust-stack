@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0012_messages.sql
 -- TSP messages, routed to specific DID service endpoints (DID-level, not
 -- identity-level). Messages are TSP point-to-point — never replicated via pubsub.

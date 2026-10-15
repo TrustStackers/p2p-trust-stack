@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * VRC-based name claims for DID methods that don't support alsoKnownAs
  * (e.g., did:peer:4).

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "P2P Trust Stack app API — the agent runtime, host seam, DTOs and domain interfaces that applications program against.",
   "type": "module",
-  "license": "(GPL-3.0-only OR LicenseRef-Commercial)",
+  "license": "(GPL-3.0-only OR LicenseRef-TrustStackers-Commercial)",
   "publishConfig": {
     "access": "public"
   },

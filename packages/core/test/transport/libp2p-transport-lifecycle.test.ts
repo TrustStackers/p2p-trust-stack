@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+// Copyright (C) 2026 Trust Stackers
+
 /**
  * Lifecycle tests for Libp2pTransport — Step 5 (Tasks 5.1, 5.2, 5.3).
  *

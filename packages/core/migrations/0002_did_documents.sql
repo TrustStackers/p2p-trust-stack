@@ -1,3 +1,6 @@
+-- SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+-- Copyright (C) 2026 Trust Stackers
+
 -- 0002_did_documents.sql
 -- One or more DID documents per identity. The root identity (did:scid:vh)
 -- has is_primary=1. Context-scoped DIDs (C-DID, M-DID, R-DID, P-DID) are
