@@ -5,14 +5,19 @@
 //   node scripts/add-spdx-headers.mjs <root-dir> [...]           # add headers (idempotent)
 //   node scripts/add-spdx-headers.mjs --check <root-dir> [...]   # verify; exit 1 if any missing
 //
+// Options:
+//   --license=<SPDX expression>  default: GPL-3.0-only OR LicenseRef-TrustStackers-Commercial
+//   --copyright=<text>           default: Copyright (C) 2026 Trust Stackers
+//   --exclude=<dir-name>         skip a directory by name (repeatable), e.g. examples
+//
 // A leading BOM and a leading shebang line are preserved. Generated output
 // (dist/, node_modules/) is ignored.
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, extname } from 'node:path';
 
-const LICENSE_ID = 'GPL-3.0-only OR LicenseRef-TrustStackers-Commercial';
-const COPYRIGHT = 'Copyright (C) 2026 Trust Stackers';
+const DEFAULT_LICENSE_ID = 'GPL-3.0-only OR LicenseRef-TrustStackers-Commercial';
+const DEFAULT_COPYRIGHT = 'Copyright (C) 2026 Trust Stackers';
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'coverage', '.smoke']);
 const COMMENT = {
@@ -27,10 +32,24 @@ const COMMENT = {
 
 const args = process.argv.slice(2);
 const check = args.includes('--check');
+
+function flag(name) {
+  const hit = args.find((a) => a.startsWith(`${name}=`));
+  return hit ? hit.slice(name.length + 1) : undefined;
+}
+
+const LICENSE_ID = flag('--license') || DEFAULT_LICENSE_ID;
+const COPYRIGHT = flag('--copyright') || DEFAULT_COPYRIGHT;
+const EXCLUDES = args
+  .filter((a) => a.startsWith('--exclude='))
+  .map((a) => a.slice('--exclude='.length));
 const roots = args.filter((a) => !a.startsWith('--'));
 
 if (roots.length === 0) {
-  console.error('usage: add-spdx-headers.mjs [--check] <root-dir> [...]');
+  console.error(
+    'usage: add-spdx-headers.mjs [--check] [--license=<SPDX>] [--copyright=<text>] ' +
+      '[--exclude=<dir>]... <root-dir> [...]',
+  );
   process.exit(2);
 }
 
@@ -38,11 +57,21 @@ function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue;
+      if (EXCLUDES.includes(entry.name)) continue;
       yield* walk(join(dir, entry.name));
     } else if (entry.isFile()) {
       yield join(dir, entry.name);
     }
   }
+}
+
+// A real header is a comment line naming the SPDX identifier near the top of
+// the file (after an optional BOM and shebang). A bare substring test is wrong:
+// this very script *mentions* the identifier in its own source.
+const HEADER_RE = /^(?:\uFEFF)?(?:#![^\n]*\n\s*)?(?:\/\/|--)\s*SPDX-License-Identifier:/;
+
+function hasHeader(text) {
+  return HEADER_RE.test(text);
 }
 
 let added = 0;
@@ -55,7 +84,7 @@ for (const root of roots) {
     if (!prefix) continue;
 
     const original = readFileSync(file, 'utf8');
-    if (original.includes('SPDX-License-Identifier')) {
+    if (hasHeader(original)) {
       ok++;
       continue;
     }
@@ -91,7 +120,7 @@ if (check) {
   if (missing.length) {
     console.error(`FAIL: ${missing.length} file(s) are missing an SPDX header:`);
     for (const file of missing) console.error(`  - ${file}`);
-    console.error('\nFix: node scripts/add-spdx-headers.mjs packages');
+    console.error('\nFix: node scripts/add-spdx-headers.mjs <root-dir>');
     process.exit(1);
   }
   console.log(`OK: all ${ok} source file(s) carry an SPDX header.`);

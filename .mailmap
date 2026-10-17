@@ -1,0 +1,11 @@
+# Git identity map — P2P Trust Stack
+#
+# One contributor had two GitHub identities configured on different machines.
+# Commits authored as `shannon@iotinventor.com` are the same person as
+# `simmunity@gmail.com`. Resolving both to one identity keeps attribution and
+# copyright audits correct WITHOUT rewriting history (which would change every
+# commit hash).
+#
+# Check with: git check-mailmap <shannon@iotinventor.com>
+Shannon <simmunity@gmail.com> ShannonB <shannon@iotinventor.com>
+Erika Bjune <erika@simmunity.com> ebjune <erika@simmunity.com>
