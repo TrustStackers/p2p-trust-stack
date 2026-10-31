@@ -4,7 +4,7 @@
 /**
  * bootstrap-env tests — the typed, source-pluggable bootstrap config loader.
  *
- * These pin the contract that replaced the hardcoded `mediator.fpndtg.com`
+ * These pin the contract that replaced the hardcoded `relay.truststackers.com`
  * address + peer ID and the `process.env.BOOTSTRAP_*` overrides: a `.env` (or any
  * `EnvSource`) is parsed into a validated `BootstrapEnv`, the peer ID is derived
  * deterministically from the seed, and a corrupt/missing config throws instead of

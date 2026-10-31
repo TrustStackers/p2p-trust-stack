@@ -38,7 +38,7 @@ import { logger } from '../util/logger.js';
 // constants in this file. They are loaded from the component's `.env` through
 // `src/config/bootstrap-env.ts` (written by `npm run init:bootstrap`) and passed
 // to the constructor by the caller. This removes the hardcoded
-// `mediator.fpndtg.com` address and the `process.env.BOOTSTRAP_SERVER_URL`
+// `relay.truststackers.com` address and the `process.env.BOOTSTRAP_SERVER_URL`
 // override that used to live here.
 
 /** The bootstrap protocol identifier. */
