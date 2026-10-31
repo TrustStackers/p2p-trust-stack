@@ -22,17 +22,59 @@
 
 import type { Libp2p } from 'libp2p';
 import { multiaddr } from '@multiformats/multiaddr';
-import { peerIdFromString } from '@libp2p/peer-id';
 import { BootstrapClient, type DiscoveredPeer } from '@p2p-trust-stack/core/transport/bootstrap-client.js';
-import { loadBootstrapEnv, buildBootstrapUrls, type BootstrapEnv } from '@p2p-trust-stack/core/config/bootstrap-env.js';
+import { loadBootstrapClientEnv, buildBootstrapUrls, type BootstrapClientEnv } from '@p2p-trust-stack/core/config/bootstrap-env.js';
 
-import { NetworkDetectModule, type NetworkProfile, buildDialableMultiaddrs } from '@p2p-trust-stack/core/platform/network-detect.js';
+import {
+  NetworkDetectModule,
+  type NetworkProfile,
+  buildDialableMultiaddrs,
+  getLocalLanIps,
+} from '@p2p-trust-stack/core/platform/network-detect.js';
 import {
   readRelayHealth,
   type RelayHealthSnapshot,
 } from '@p2p-trust-stack/core/transport/relay-health.js';
+import {
+  buildDialCandidates,
+  dialCandidateAddrs,
+  type DialCandidate,
+} from '@p2p-trust-stack/core/transport/dial-candidates.js';
 import type { TspTransport } from '@p2p-trust-stack/core/transport/types.js';
 import type { RelationshipStore } from '@p2p-trust-stack/core/relationship/store.js';
+
+// ---------------------------------------------------------------------------
+// Dial bounds
+// ---------------------------------------------------------------------------
+
+/** The TSP stream protocol negotiated on every connection. */
+const TSP_PROTOCOL_ID = '/tsp/1.0.0';
+/** Bound on a direct dial attempt, so one dead address cannot stall the ladder. */
+const DIRECT_DIAL_TIMEOUT_MS = 10_000;
+/** Bound on the relay HOP dial — a dead relay circuit must not hang recovery. */
+const RELAY_DIAL_TIMEOUT_MS = 15_000;
+/** Bound on the TSP stream open through a relay. */
+const RELAY_STREAM_TIMEOUT_MS = 10_000;
+/**
+ * Delay before the single relay retry. The target's circuit-relay reservation is
+ * created asynchronously during its own `register()` (see
+ * `BootstrapClient.ensureRelayReservation()`), so an immediate HOP can lose that
+ * race; 2 s covers it without making recovery slow.
+ */
+const RELAY_RETRY_DELAY_MS = 2_000;
+
+/**
+ * Ensure a dial target names the peer it is meant for.
+ *
+ * A multiaddr with no `/p2p/<peerId>` makes libp2p dial an UNIDENTIFIED peer: it
+ * has nothing to check the handshake's peer ID against, so whatever answers at
+ * that address is accepted as the peer. Every candidate reaching the ladder came
+ * from an OOBI or the bootstrap directory and should already carry the peer ID —
+ * this is the guard, not the common path.
+ */
+function withPeerId(addr: string, peerId: string): string {
+  return addr.includes('/p2p/') ? addr : `${addr}/p2p/${peerId}`;
+}
 
 // ---------------------------------------------------------------------------
 // ConnectivityModule
@@ -70,8 +112,13 @@ export class ConnectivityModule {
     net?: string;
     /** True when this is a test-suite agent (bootstrap TTL-prunes it). */
     test?: boolean;
-    /** Pre-loaded bootstrap env (composition root injection). */
-    bootstrapEnv?: BootstrapEnv;
+    /**
+     * Pre-loaded bootstrap client config (composition root injection).
+     *
+     * A CLIENT config — host + peer ID, no seed. The seed belongs to the bootstrap
+     * server alone; this module only needs the address and the identity to expect.
+     */
+    bootstrapEnv?: BootstrapClientEnv;
     /** Explicit `.env` path. Defaults to `<cwd>/.env`. */
     bootstrapEnvPath?: string;
   }): Promise<void> {
@@ -87,10 +134,13 @@ export class ConnectivityModule {
     // `process.env` override anymore, so a missing/malformed config degrades to
     // LAN-only mode — the same behaviour as an unreachable server, and never a
     // silent wrong address.
+    //
+    // The CLIENT loader is used deliberately: an agent holds no seed, only the
+    // address and the peer ID to expect.
     let bootstrapEnv = params.bootstrapEnv;
     if (!bootstrapEnv) {
       try {
-        bootstrapEnv = loadBootstrapEnv(
+        bootstrapEnv = loadBootstrapClientEnv(
           params.bootstrapEnvPath ? { path: params.bootstrapEnvPath } : {},
         );
       } catch (err) {
@@ -222,6 +272,34 @@ export class ConnectivityModule {
       );
       this.bootstrapConnected = false;
     }
+  }
+
+  /**
+   * Set the VTN key (namespace) this agent identifies itself by, and re-register
+   * with the bootstrap so the change is visible immediately.
+   *
+   * WHY RE-REGISTER: `net` is the bootstrap-facing identity — it is what the
+   * peer list shows beside the agent and what tells the network which VTN this
+   * agent belongs to. Registration happens in `start()`, before the user has
+   * picked a VTN, so the picker has to update the designation and push it.
+   *
+   * A no-op when the key is unchanged (the common "already on this VTN" case),
+   * so re-picking the current VTN does not churn the bootstrap connection.
+   */
+  async setNet(
+    net: string,
+    params: { libp2pNode: Libp2p; multiaddrs: string[]; onStatus?: (message: string) => void },
+  ): Promise<void> {
+    const next = net.trim();
+    if (!next) throw new Error('ConnectivityModule.setNet: a VTN key is required');
+    if (this.net === next) return;
+    this.net = next;
+    await this.reRegisterWithBootstrap(params);
+  }
+
+  /** The VTN key this agent currently identifies itself by (undefined until chosen). */
+  getNet(): string | undefined {
+    return this.net;
   }
 
   /**
@@ -405,10 +483,19 @@ export class ConnectivityModule {
   /**
    * Reconnect to an already-established peer without requiring a fresh OOBI.
    *
-   * Phase 8: Clean 2-tier connection strategy via bootstrap server:
-   *   1. Try bootstrap-discovered direct addresses
-   *   2. Dial via circuit relay through the bootstrap server (NAT traversal)
-   *   3. Last-known direct addresses as absolute fallback
+   * Refreshes the bootstrap peer list, then walks ONE ordered address list
+   * (`dialCandidatesFor()` → `dialPeerCandidates()`) built from the bootstrap
+   * directory plus the last-known addresses:
+   *
+   *   1. relay        — a `/p2p-circuit` address (works from any network)
+   *   2. same-subnet  — a direct address on OUR own LAN
+   *   3. dns          — an operator-declared hostname
+   *   4. lan / wan    — other direct addresses, then last-known
+   *
+   * The order is deliberate and is the fix for cross-network joins: libp2p's
+   * default address sorter puts a NAT-mapped public IP first and the relay last,
+   * so the dial budget was spent on addresses nothing listens on. See
+   * dial-candidates.ts.
    *
    * The previous LAN port sweep has been removed — circuit relay is the
    * reliable fallback for internet connections.
@@ -444,203 +531,193 @@ export class ConnectivityModule {
       params.onStatus?.('Bootstrap refresh failed, using cached peer data.');
     }
 
-    // Phase 11 fix: retry helper for relay dials. The target peer's circuit-
-    // relay reservation may not be fully established on the bootstrap server
-    // immediately after it re-registers (ensureRelayReservation() is async
-    // and called during register()). A single retry after a short delay
-    // covers this race condition without making reconnect take too long.
-    const relayAddrSources: Array<{ label: string; getAddr: () => string | undefined }> = [];
-
-    // Step 1: Try bootstrap-discovered direct addresses
-    const bootstrapPeer = this.discoveredPeers.get(peerId);
-    if (bootstrapPeer) {
-      // If the peer has direct addresses, try those first
-      if (bootstrapPeer.multiaddrs.length > 0) {
-        params.onStatus?.('Reconnecting via bootstrap-discovered addresses...');
-        try {
-          params.store.updateTransport(params.localDid, params.remoteDid, {
-            peerId,
-            multiaddrs: bootstrapPeer.multiaddrs,
-          });
-          // Fix: dialProtocol() requires a real PeerId object (it calls the
-          // internal isPeerId() guard) — passing a plain string throws
-          // InvalidMultiaddrError immediately, before any network attempt is
-          // even made. This previously caused every reconnect to skip straight
-          // past "direct connection" with a misleading error.
-          //
-          // Second fix: runOnLimitedConnection: true is required whenever the
-          // dial may resolve to a circuit-relay connection (which libp2p
-          // always treats as "limited"). Without it, Connection.newStream()
-          // (called internally by dialProtocol) throws
-          // LimitedConnectionError('Cannot open protocol stream on limited
-          // connection') even though the relayed connection itself opened
-          // successfully — see libp2p-transport.ts's send() for the full
-          // explanation. This applies here too since bootstrapPeer.multiaddrs
-          // may include a /p2p-circuit address patched into the peer store.
-          const stream = await (params.libp2pNode as any).dialProtocol(
-            peerIdFromString(peerId),
-            '/tsp/1.0.0',
-            { runOnLimitedConnection: true },
-          );
-          params.onStatus?.('Reconnected via direct connection.');
-
-          try { await stream.close(); } catch { /* ignore */ }
-          return;
-        } catch (err) {
-          params.onStatus?.(`Direct connection failed (${err instanceof Error ? err.message : 'unknown'}), trying circuit relay...`);
-        }
-
-      }
-
-      // Step 2a: Try relay address from bootstrap-discovered peer
-      if (bootstrapPeer.relayAddr) {
-        relayAddrSources.push({
-          label: 'circuit relay',
-          getAddr: () => bootstrapPeer.relayAddr,
-        });
-      }
-    }
-
-    // Step 2b: Try server-level relay address (construct from server relay prefix)
+    // ONE ordered address list for this peer, and one dial ladder over it.
     //
-    // this.bootstrapRelayAddr now arrives from the bootstrap server already
-    // correctly ordered as `<relay-addr>/p2p/{relayPeerId}/p2p-circuit` (see
-    // bootstrap-server.ts's relayAddr fix). Appending `/p2p/{destPeerId}`
-    // after the trailing /p2p-circuit produces the standard dial-through-relay
-    // shape: `<relay-addr>/p2p/{relayPeerId}/p2p-circuit/p2p/{destPeerId}`.
-    // The `.replace()` here is defensive only — it strips a legacy/malformed
-    // trailing `/p2p/{id}` if one is ever present (e.g. mid-rollout against
-    // an old server build); on a correctly-shaped address ending in
-    // /p2p-circuit it is a no-op since the regex only matches a trailing
-    // /p2p/{id} segment, not /p2p-circuit.
-    if (this.bootstrapRelayAddr) {
-      relayAddrSources.push({
-        label: 'server relay',
-        getAddr: () => this.bootstrapRelayAddr!.replace(/\/p2p\/[^/]+$/, '') + `/p2p/${peerId}`,
+    // This replaced an inline "all direct addresses, then relay, then
+    // last-known" ladder that existed ONLY here — the join path had no relay
+    // fallback at all, so a first cross-network join could never reach the
+    // relay. Both paths now call dialCandidatesFor()/dialPeerCandidates().
+    //
+    // Ordering is the whole point: libp2p's default sorter ranks a NAT-mapped
+    // public address ahead of the LAN one and pushes the relay to the end, so
+    // the dial budget was spent on addresses nothing listens on. See
+    // dial-candidates.ts for the measured evidence and the policy.
+    const bootstrapPeer = this.discoveredPeers.get(peerId);
+    const candidates = this.dialCandidatesFor({
+      peerId,
+      multiaddrs: bootstrapPeer?.multiaddrs,
+      peerRelayAddr: bootstrapPeer?.relayAddr,
+      lastKnownMultiaddrs: params.recordRemoteTransport.multiaddrs,
+    });
+
+    const dialled = await this.dialPeerCandidates({
+      libp2pNode: params.libp2pNode,
+      peerId,
+      candidates,
+      onStatus: params.onStatus,
+    });
+
+    if (dialled) {
+      params.store.updateTransport(params.localDid, params.remoteDid, {
+        peerId,
+        // Store the WHOLE ordered list, not just the address that won: the peer
+        // store then keeps every option, and the installed addressSorter picks
+        // the best one on the next dial.
+        multiaddrs: dialCandidateAddrs(candidates),
       });
+      return;
     }
-
-
-    // Try each relay address source, with a single retry after a brief delay
-    // to cover the race where the target peer's circuit-relay reservation
-    // hasn't been fully established yet.
-    for (const source of relayAddrSources) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const relayAddr = source.getAddr();
-        if (!relayAddr) continue;
-
-        if (attempt === 1) {
-          params.onStatus?.(`Retrying ${source.label} after brief delay (reservation may not be ready)...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          params.onStatus?.(`Reconnecting via ${source.label}...`);
-        }
-
-        try {
-          await this.dialViaRelay({
-            libp2pNode: params.libp2pNode,
-            store: params.store,
-            localDid: params.localDid,
-            remoteDid: params.remoteDid,
-            peerId,
-            relayAddr,
-            onStatus: params.onStatus,
-          });
-          return;
-        } catch {
-          params.onStatus?.(`${source.label} attempt ${attempt + 1} failed.`);
-        }
-      }
-    }
-
-    // Step 2c: Try last-known direct addresses as absolute fallback
-    const { multiaddrs } = params.recordRemoteTransport;
-    if (multiaddrs && multiaddrs.length > 0) {
-      params.onStatus?.('Trying last known addresses...');
-      try {
-        // Same PeerId-vs-string + runOnLimitedConnection fix as Step 1 above.
-        const stream = await (params.libp2pNode as any).dialProtocol(
-          peerIdFromString(peerId),
-          '/tsp/1.0.0',
-          { runOnLimitedConnection: true },
-        );
-        params.onStatus?.('Reconnected via last known addresses.');
-
-        try { await stream.close(); } catch { /* ignore */ }
-        return;
-      } catch (err) {
-        params.onStatus?.(`Last-known-address connection failed: ${err instanceof Error ? err.message : 'unknown'}`);
-      }
-    }
-
 
     throw new Error(
       `reconnectPeer: unable to reach ${params.remoteDid.slice(0, 12)}... ` +
-      `Direct, relay, and last-known addresses all failed. ` +
+      `Tried ${candidates.length} address(es): ${dialCandidateAddrs(candidates).join(', ') || 'none'}. ` +
       `Ensure both peers are registered with the bootstrap server.`,
     );
   }
 
   /**
-   * Dial a peer through the bootstrap server's circuit relay.
+   * The ordered dial-target list for one destination peer — the ONE place an
+   * address list is built in this stack.
    *
-   * Uses multiaddr() + dial() + connection.newStream() instead of
-   * dialProtocol(multiaddrString). The dialProtocol API expects a PeerId +
-   * protocol string, not a full multiaddr containing /p2p-circuit components.
-   * To dial through a relay, we must:
+   * The JOIN path calls this to seed an OOBI (so the very first RFI already
+   * carries the relay address), and `reconnectPeer()` calls it to drive the
+   * recovery ladder. Before this existed the two disagreed: the join used only
+   * the bootstrap's `multiaddrs`, which never contain a `/p2p-circuit` address
+   * because `buildDialableMultiaddrs()` filters them out — so a first
+   * cross-network join had no relay to fall back to at all.
+   *
+   * The server-level relay prefix is supplied automatically from the bootstrap
+   * registration, and this machine's LAN IPs let a same-subnet peer outrank the
+   * relay. See dial-candidates.ts for the ranking rationale.
+   */
+  dialCandidatesFor(params: {
+    peerId: string;
+    multiaddrs?: readonly string[];
+    peerRelayAddr?: string;
+    lastKnownMultiaddrs?: readonly string[];
+  }): DialCandidate[] {
+    return buildDialCandidates({
+      peerId: params.peerId,
+      multiaddrs: params.multiaddrs,
+      peerRelayAddr: params.peerRelayAddr,
+      serverRelayPrefix: this.bootstrapRelayAddr,
+      localLanIps: getLocalLanIps(),
+      lastKnownMultiaddrs: params.lastKnownMultiaddrs,
+    });
+  }
+
+  /**
+   * Dial `peerId` through an ordered candidate list and report the address that
+   * worked, or `undefined` when every candidate failed.
+   *
+   * The single dial implementation for BOTH the join path and recovery. Each
+   * candidate is attempted in the order `buildDialCandidates()` produced, so the
+   * relay is tried BEFORE a NAT-mapped public address instead of after it.
+   *
+   * Relay candidates get one retry after a short delay: the target's
+   * circuit-relay reservation is established asynchronously during its own
+   * `register()`, so an immediate HOP can lose a race a second attempt wins.
+   * Never throws — the caller decides what an exhausted list means.
+   */
+  async dialPeerCandidates(params: {
+    libp2pNode: Libp2p;
+    peerId: string;
+    candidates: readonly DialCandidate[];
+    onStatus?: (message: string) => void;
+  }): Promise<string | undefined> {
+    const { libp2pNode, peerId, candidates, onStatus } = params;
+    const short = peerId.slice(0, 12);
+    if (candidates.length === 0) {
+      onStatus?.(`No dial addresses known for ${short}...`);
+      return undefined;
+    }
+
+    for (const candidate of candidates) {
+      const label = `${candidate.scope}/${candidate.source}`;
+      const isRelay = candidate.scope === 'relay';
+      // A relay HOP that loses the reservation race is worth one retry; a dead
+      // direct address is not (it would only burn the caller's time budget).
+      const attempts = isRelay ? 2 : 1;
+
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        if (attempt > 1) {
+          onStatus?.(`Retrying ${short}... via ${label} after the reservation race.`);
+          await new Promise((resolve) => setTimeout(resolve, RELAY_RETRY_DELAY_MS));
+        }
+        onStatus?.(`Dialing ${short}... via ${label}: ${candidate.addr}`);
+        try {
+          if (isRelay) {
+            await this.dialRelayAddr({ libp2pNode, relayAddr: candidate.addr });
+          } else {
+            // Dial THIS candidate, not "the peer".
+            //
+            // `dialProtocol(peerId, …)` hands libp2p the peer's WHOLE stored
+            // address list and lets its dial queue pick, and the first dial that
+            // completes at the transport level wins — including one that opens
+            // and then immediately closes. libp2p returns that connection anyway
+            // (its `dial-queue.ts` never checks `connection.status`), and
+            // `openConnection` then throws
+            // `ConnectionClosedError('Remote closed connection during opening')`,
+            // aborting the ENTIRE call. So one bad address used to skip every
+            // remaining candidate — relay included. That is the field failure of
+            // 2026-10-29 on MBP2014, where the mis-ranked `192.168.1.28` (a
+            // DIFFERENT network's LAN address that happens to share our /24)
+            // aborted the dial before the relay was ever tried.
+            //
+            // Naming the address contains it: a bad candidate now costs one
+            // candidate, and the ladder keeps walking. It also makes the
+            // `onStatus` line above truthful — it always named the candidate, but
+            // the call it described was a dial of the peer's whole address list.
+            const stream = await (libp2pNode as any).dialProtocol(
+              multiaddr(withPeerId(candidate.addr, peerId)),
+              TSP_PROTOCOL_ID,
+              { runOnLimitedConnection: true, signal: AbortSignal.timeout(DIRECT_DIAL_TIMEOUT_MS) },
+            );
+            try { await stream.close(); } catch { /* ignore */ }
+          }
+          onStatus?.(`Connected to ${short}... via ${label}.`);
+          return candidate.addr;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          onStatus?.(`${label} failed for ${short}...: ${message}`);
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Dial a `/p2p-circuit` address and open (then close) a TSP stream on it.
+   *
+   * Uses multiaddr() + dial() + connection.newStream() rather than
+   * dialProtocol(multiaddrString): the dialProtocol API takes a PeerId + a
+   * protocol string, not a full multiaddr containing `/p2p-circuit` components.
+   * To dial through a relay we must:
    *   1. Parse the relay multiaddr
    *   2. dial() to establish the connection through the relay
-   *   3. connection.newStream() to negotiate the /tsp/1.0.0 protocol
+   *   3. connection.newStream() to negotiate the TSP protocol
    *
-   * Fix: this previously called `libp2pNode.getProtocolStream(...)`, which is
-   * not a real method on the libp2p API (it does not exist anywhere in
-   * libp2p/@libp2p/interface) — every relay dial threw a TypeError and was
-   * silently swallowed by the caller's try/catch as "Relay connection
-   * failed.". The connection object returned by dial() already exposes
-   * `.newStream(protocol)` directly, which is the correct, documented way to
-   * open a new stream on an established connection.
+   * A connection dialed through `/p2p-circuit` is ALWAYS "limited" in libp2p
+   * (`connection.limits != null`), so `newStream()` throws
+   * `LimitedConnectionError` unless `runOnLimitedConnection: true` is passed.
    *
-   * Note: even with this fixed, the relay dial will still be rejected by the
-   * bootstrap server with NO_RESERVATION unless the *target* peer has an
-   * active circuit-relay reservation — see BootstrapClient.ensureRelayReservation().
+   * The relay still rejects the HOP with `NO_RESERVATION` unless the *target*
+   * peer holds a live reservation — see
+   * `BootstrapClient.ensureRelayReservation()`.
    */
-  private async dialViaRelay(params: {
+  private async dialRelayAddr(params: {
     libp2pNode: Libp2p;
-    store: RelationshipStore;
-    localDid: string;
-    remoteDid: string;
-    peerId: string;
     relayAddr: string;
-    onStatus?: (message: string) => void;
   }): Promise<void> {
-    params.onStatus?.(`Dialing via relay: ${params.relayAddr}`);
-
-    // Parse the relay multiaddr and dial through it (bounded so a dead relay
-    // circuit can't hang the reconnect flow indefinitely).
     const ma = multiaddr(params.relayAddr);
-    const connection = await (params.libp2pNode as any).dial(ma, { signal: AbortSignal.timeout(15000) });
-
-    // Open a stream on the /tsp/1.0.0 protocol through this relay connection.
-    //
-    // Bug fix: a connection dialed through /p2p-circuit is ALWAYS a "limited"
-    // connection in libp2p (connection.limits != null). newStream() throws
-    // LimitedConnectionError unless runOnLimitedConnection: true is passed —
-    // this was silently swallowed by the caller's try/catch as a generic
-    // "circuit relay attempt failed", masking the real cause.
-    const stream = await connection.newStream('/tsp/1.0.0', {
-      signal: AbortSignal.timeout(10000),
+    const connection = await (params.libp2pNode as any).dial(ma, {
+      signal: AbortSignal.timeout(RELAY_DIAL_TIMEOUT_MS),
+    });
+    const stream = await connection.newStream(TSP_PROTOCOL_ID, {
+      signal: AbortSignal.timeout(RELAY_STREAM_TIMEOUT_MS),
       runOnLimitedConnection: true,
     });
-
-
-    params.onStatus?.('Reconnected via circuit relay.');
-
-    // Update the store with relay address for future reference
-    params.store.updateTransport(params.localDid, params.remoteDid, {
-      peerId: params.peerId,
-      multiaddrs: [params.relayAddr],
-    });
-
     try { await stream.close(); } catch { /* ignore */ }
   }
 

@@ -503,13 +503,31 @@ export function deriveConnectivityStatus(inputs: ConnectivityInputs): Connectivi
 }
 
 /**
+ * What kind of operation is being gated.
+ *
+ * The distinction matters because the two have different "what happens next":
+ *
+ *   - `mutation` — a change was accepted locally and is queued for the server, so
+ *     "your change has been kept locally" is true and useful.
+ *   - `connection` — a JOIN or a connect. Nothing was kept locally, because the
+ *     connection itself is what is missing. Telling the user their "change has
+ *     been kept locally" for a failed join is simply wrong, and it also hides the
+ *     fact that they must retry (or that a retry is already running).
+ */
+export type ConnectivityFailureKind = 'mutation' | 'connection';
+
+/**
  * Copy for a gated operation that cannot proceed. Names the failed layer and
  * what happens next, instead of the previous context-free
  * "Not connected to utility server."
+ *
+ * Defaults to `mutation`, which is the wording every pre-existing caller (and
+ * test) expects; pass `connection` for joins and connects.
  */
 export function describeConnectivityFailure(
   status: ConnectivityStatus,
   operation: string,
+  kind: ConnectivityFailureKind = 'mutation',
 ): string {
   switch (status.layer) {
     case 'bootstrap-unreachable':
@@ -518,6 +536,13 @@ export function describeConnectivityFailure(
         `server cannot be reached. Reconnection is running in the background — try again shortly.`
       );
     case 'unreachable':
+      if (kind === 'connection') {
+        return (
+          `Cannot ${operation}: the utility server could not be reached. ` +
+          `Reconnection is running in the background — try again shortly.` +
+          (status.lastError ? ` (last error: ${status.lastError})` : '')
+        );
+      }
       return (
         `Cannot ${operation}: the relay connection to the utility server could not be ` +
         `re-established. Your change has been kept locally and will be sent automatically once ` +
@@ -525,6 +550,12 @@ export function describeConnectivityFailure(
         (status.lastError ? ` (last error: ${status.lastError})` : '')
       );
     case 'reconnecting':
+      if (kind === 'connection') {
+        return (
+          `Cannot ${operation} yet: the connection to the utility server is being established. ` +
+          `Retrying automatically — try again shortly.`
+        );
+      }
       return (
         `Cannot ${operation} yet: the connection to the utility server is being re-established. ` +
         `Retrying automatically — no data has been lost.`

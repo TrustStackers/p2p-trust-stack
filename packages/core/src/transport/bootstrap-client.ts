@@ -140,6 +140,12 @@ export interface DiscoveredPeer {
   net?: string;
   /** The peer's user name (bootstrap-facing), resolvable as vta:<net>:<agentName>. */
   agentName?: string;
+  /**
+   * UTILITY SERVER ONLY: the display name of the VTN it serves (e.g. 'Trust
+   * Stackers'). `net` is the machine key ('p2pts') an agent matches on; this is
+   * only the human label beside it.
+   */
+  vtnName?: string;
   /** True when the peer currently holds a circuit-relay reservation on the
    *  bootstrap/relay server (authoritative "reachable via relay" signal). */
   reachableViaRelay?: boolean;
@@ -363,7 +369,7 @@ export class BootstrapClient {
     peerType?: 'agent' | 'utility_server',
     vid?: string,
     identity?: { vtaUuid?: string; realDid?: string; name?: string; subjectKind?: string },
-    designation?: { net?: string; agentName?: string; nameUri?: string; test?: boolean },
+    designation?: { net?: string; agentName?: string; vtnName?: string; nameUri?: string; test?: boolean },
   ): Promise<BootstrapResult> {
     const peerId = node.peerId.toString();
 
@@ -393,6 +399,12 @@ export class BootstrapClient {
     }
     if (designation?.agentName) {
       msgObj.agentName = designation.agentName;
+    }
+    // UTILITY SERVER ONLY: the VTN's display name. `net` above is the machine
+    // key agents match on; this is the human label the bootstrap renders beside
+    // it, kept in its own field so it can never be read as an agent name.
+    if (designation?.vtnName) {
+      msgObj.vtnName = designation.vtnName;
     }
     if (designation?.nameUri) {
       msgObj.nameUri = designation.nameUri;
@@ -543,25 +555,41 @@ export class BootstrapClient {
 
     const lp = lpStream(stream, { maxDataLength: 65536 });
 
-    // Send the request
-    await lp.write(payload);
-
-    // Read the response
-    const data = await lp.read();
-    if (data === null) {
-      throw new Error('Bootstrap server closed connection before responding');
-    }
-
-    // Close the stream only — the underlying TCP connection stays alive for keepalive
     try {
-      await stream.close();
-    } catch {
-      // Stream may already be closed
-    }
+      // Send the request
+      await lp.write(payload);
 
-    // Parse the response
-    const response = JSON.parse(new TextDecoder().decode(data.slice(0, data.length)));
-    return response as BootstrapResponse;
+      // Read the response
+      const data = await lp.read();
+      if (data === null) {
+        throw new Error('Bootstrap server closed connection before responding');
+      }
+
+      // Parse the response
+      const response = JSON.parse(new TextDecoder().decode(data.slice(0, data.length)));
+      return response as BootstrapResponse;
+    } finally {
+      // Close the stream on EVERY path — the STREAM only, so the underlying TCP
+      // connection stays alive for keepalive and the relay reservation.
+      //
+      // This used to be a bare `await stream.close()` on the SUCCESS path only, so
+      // the `data === null` throw above (and any lp.write()/lp.read() failure)
+      // leaked the stream. A leak here is not untidy, it is the wedge: every
+      // leaked stream occupies a slot on the long-lived bootstrap connection, and
+      // libp2p caps streams per protocol (`maxInboundStreams`, 32 by default) and
+      // then resets every subsequent one. register() runs on every reconnect
+      // cycle, so a flapping connection leaks one stream per cycle until the
+      // bootstrap protocol codec is dead for the life of the connection — which
+      // is the "Unexpected EOF - stream closed while reading 0/1 bytes" /
+      // "Bootstrap connection lost after 3 keepalive failures" flap observed on
+      // 2026-10-29. The server side was silent throughout, because its handlers
+      // swallow their own errors by design.
+      try {
+        await stream.close();
+      } catch {
+        // Stream may already be closed
+      }
+    }
   }
 
   /**

@@ -440,7 +440,35 @@ export class RelationshipManager {
     });
 
     ceremonyTrace.rfiSent({ remoteDid: oobi.cesrVid, localDid: this.identity.did });
-    await this.transport.send(sealed, remoteTransport);
+    try {
+      await this.transport.send(sealed, remoteTransport);
+    } catch (err) {
+      // ── ROLLBACK (field fix 2026-10-29) ──────────────────────────────────
+      // The row is written BEFORE the send so an RFA that arrives immediately
+      // can be matched. But if the send itself fails, that row is a LIE: nothing
+      // is in flight, and no RFA will ever arrive to complete it.
+      //
+      // Leaving it behind is not a cosmetic leak. An outbound-pending row is
+      // read as "a handshake is in progress" by the reconnect path, which then
+      // only WAITS for it (`TspBridge.connect` → `waitForBidirectional`), and a
+      // re-send is impossible while the row exists (`insertOutbound` throws
+      // `already exists`). So ONE transient dial failure used to disable the
+      // handshake for the life of the process — the row is only reclaimed by
+      // `pruneStaleOutbound`, which runs at the NEXT agent start.
+      //
+      // Field symptom (MBP2014, 2026-10-29): a single `[RM:sendRfi]` line
+      // followed by five identical 30 s `TspBridge: timed out waiting for
+      // bidirectional relationship` errors, on a machine whose bootstrap and
+      // relay connections were demonstrably healthy. Recoverable only by
+      // restarting the app and waiting out the 5-minute prune window.
+      //
+      // A partial send (the frame was written, then the stream close threw) is
+      // safe to roll back: the peer holds a relationship and answers the fresh
+      // RFI this rollback makes possible, and the new row carries the new digest
+      // that the new RFA matches.
+      this.store.deleteRecord(this.identity.did, remoteDid);
+      throw err;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -470,6 +498,24 @@ export class RelationshipManager {
    */
   updateTransport(remoteDid: Vid, transport: TransportAddress): void {
     this.store.updateTransport(this.identity.did, remoteDid, transport);
+  }
+
+  /**
+   * Remove the relationship record with `remoteDid`, if one exists.
+   *
+   * Exists for the RECONNECT path (`TspBridge.connect`). An outbound-pending row
+   * that never completed has to be cleared before the handshake can be re-driven,
+   * because `sendRfi` refuses to insert a duplicate — `insertOutbound` throws
+   * `relationship already exists`. Without this, the only way out of a stuck
+   * pending row was to restart the process and wait out `pruneStaleOutbound`'s
+   * 5-minute window (field bug, MBP2014, 2026-10-29 — see `sendRfi`'s rollback).
+   *
+   * Deliberately unconditional: it does NOT check status, so a caller can also
+   * use it to drop an ESTABLISHED row when the peer's identity is known to have
+   * been replaced. Callers own that judgement.
+   */
+  removeRelationship(remoteDid: Vid): void {
+    this.store.deleteRecord(this.identity.did, remoteDid);
   }
 
   /**

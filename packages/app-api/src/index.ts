@@ -71,6 +71,17 @@ export type {
   ActivateIdentityOpts,
 } from './domains/identity.js';
 export type { ConnectivityApi } from './domains/connectivity.js';
+export { createBootstrapConfigApi } from './domains/bootstrap-config.js';
+export type {
+  BootstrapConfigApi,
+  BootstrapConfigDeps,
+} from './domains/bootstrap-config.js';
+export { createLoggingConfigApi } from './domains/logging-config.js';
+export type {
+  LoggingConfigApi,
+  LoggingConfigDeps,
+  LoggingConfigView,
+} from './domains/logging-config.js';
 export type { CredentialsApi, CredentialsDeps, CredentialViewFilters } from './domains/credentials.js';
 export type { CommunitiesApi, CommunitiesDeps } from './domains/communities.js';
 export { CommunityNotFoundError } from './domains/communities.js';
@@ -140,14 +151,18 @@ export type {
   HealthDto,
   ReadyDto,
   ConnectivityStatusDto,
+  ConnectivityFailureKind,
   DiscoveredPeerDto,
   NetworkProfileDto,
   BootstrapStatusDto,
   BootstrapRefreshDto,
   UtilityServerStatusDto,
+  VtnOptionDto,
   PushIdentityDto,
   OobiDto,
   ConnectionEventDto,
+  BootstrapConfigView,
+  BootstrapClientEnv,
   DelegationDto,
   DelegationRelationshipType,
   CreateDelegationInput,

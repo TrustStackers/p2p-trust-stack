@@ -26,6 +26,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   createAgentStack,
   METHOD_CLASSIFICATION,
@@ -138,7 +139,7 @@ test('every method of every exposed domain is classified — an unclassified one
   // Structural, against the domain SOURCES. This is what makes the scope robust to a domain gaining a method: a
   // new method is not reachable by accident, it is refused until someone classifies it — and this test fails so
   // the omission is noticed rather than shipped as an accidental grant.
-  const domainsDir = new URL('../../src/domains/', import.meta.url).pathname;
+  const domainsDir = fileURLToPath(new URL('../../src/domains/', import.meta.url));
   const unclassified: string[] = [];
 
   for (const domain of Object.keys(METHOD_CLASSIFICATION.read) as ScopedDomain[]) {

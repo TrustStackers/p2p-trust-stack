@@ -23,7 +23,12 @@
  *     Node (`.env` file) and, later, in a Capacitor/browser build
  *     (`import.meta.env` / an injected global).
  *
- * ## The `.env` shape (per component)
+ * ## Two `.env` shapes — one per role
+ *
+ * There are exactly TWO kinds of component, and they need different things:
+ *
+ * **The bootstrap server** (`bootstrap/.env`) — the ONLY component whose identity
+ * is derived from a word phrase. It holds the seed and derives the peer ID:
  *
  *   BOOTSTRAP_SEED_HEX=<64 hex chars>     # derived from the word sequence
  *   BOOTSTRAP_PEER_ID=12D3KooW...         # derived from the seed (optional)
@@ -32,10 +37,24 @@
  *   BOOTSTRAP_WS_PORT=4002
  *   BOOTSTRAP_ENABLE_RELAY=true
  *
- * `BOOTSTRAP_PEER_ID` is optional: when omitted it is derived from
+ * `BOOTSTRAP_PEER_ID` is optional there: when omitted it is derived from
  * `BOOTSTRAP_SEED_HEX` (see {@link derivePeerIdFromSeedHex}). When both are
  * present they must agree — a mismatch is a corrupt config, not a preference,
- * so {@link verifyBootstrapEnv} rejects it.
+ * so {@link verifyBootstrapEnv} rejects it. Read with {@link loadBootstrapEnv}.
+ *
+ * **A client** (`agent-app/.env`, `utility-server/.env`) — every other component
+ * only has to know WHERE the server is and WHICH peer ID to expect. It holds no
+ * key material at all:
+ *
+ *   BOOTSTRAP_PEER_ID=12D3KooW...         # required — there is no seed to derive it from
+ *   BOOTSTRAP_HOST=mediator.example.com
+ *   BOOTSTRAP_TCP_PORT=4001
+ *   BOOTSTRAP_WS_PORT=4002
+ *   BOOTSTRAP_ENABLE_RELAY=true
+ *
+ * Read with {@link loadBootstrapClientEnv}, which REJECTS a client `.env` that
+ * still carries `BOOTSTRAP_SEED_HEX` — a seed in a client file is a leaked
+ * private key, not a preference, and a client has no use for it.
  */
 
 import { readFileSync } from 'node:fs';
@@ -65,7 +84,7 @@ export interface BootstrapEnv {
   enableRelay: boolean;
 }
 
-/** The multiaddrs derived from a {@link BootstrapEnv}. */
+/** The multiaddrs derived from a {@link BootstrapEnv} or {@link BootstrapClientEnv}. */
 export interface BootstrapUrls {
   /** TCP dial address, e.g. `/dns/host/tcp/4001/p2p/<peerId>`. */
   tcpUrl: string;
@@ -74,6 +93,40 @@ export interface BootstrapUrls {
   /** Circuit-relay prefix, e.g. `/dns/host/tcp/4001/p2p/<peerId>/p2p-circuit`. */
   relayAddr: string;
 }
+
+/**
+ * The bootstrap identity + address a **client** component needs — deliberately
+ * WITHOUT the seed.
+ *
+ * Only the bootstrap server holds `BOOTSTRAP_SEED_HEX`: it is the one component
+ * whose peer ID is derived from a word sequence. The agent app and the utility
+ * server are clients — they only have to know where the server is and which peer
+ * ID to expect — so their `.env` carries `BOOTSTRAP_PEER_ID` + `BOOTSTRAP_HOST`
+ * and never any key material.
+ */
+export interface BootstrapClientEnv {
+  /** Schema version, so the shape can evolve. */
+  version: 1;
+  /** The libp2p peer ID (base58btc `12D3Koo...`) to dial and to expect. */
+  peerId: string;
+  /** DNS hostname or fixed public IP the server is reachable at. */
+  host: string;
+  /** TCP dial port (default 4001). */
+  tcpPort: number;
+  /** WebSocket dial port (default 4002). */
+  wsPort: number;
+  /** Whether the server advertises a circuit-relay service. */
+  enableRelay: boolean;
+}
+
+/**
+ * The subset {@link buildBootstrapUrls} needs.
+ *
+ * Satisfied by BOTH {@link BootstrapEnv} (the server) and
+ * {@link BootstrapClientEnv} (a client), so the one URL builder serves both roles
+ * and neither has to convert into the other.
+ */
+export type BootstrapUrlsInput = Pick<BootstrapEnv, 'host' | 'tcpPort' | 'wsPort' | 'peerId'>;
 
 /**
  * A pluggable source of raw `KEY=value` config.
@@ -172,7 +225,6 @@ export function browserEnvSource(): EnvSource {
       if (injected) return { ...injected };
       if (viteEnv) {
         return {
-          BOOTSTRAP_SEED_HEX: viteEnv.VITE_BOOTSTRAP_SEED_HEX ?? '',
           BOOTSTRAP_PEER_ID: viteEnv.VITE_BOOTSTRAP_PEER_ID ?? '',
           BOOTSTRAP_HOST: viteEnv.VITE_BOOTSTRAP_HOST ?? '',
           BOOTSTRAP_TCP_PORT: viteEnv.VITE_BOOTSTRAP_TCP_PORT ?? '',
@@ -233,8 +285,8 @@ export function hostToMultiaddrPrefix(host: string): string {
   return `/dns/${host}`;
 }
 
-/** Build the TCP/WS/relay multiaddrs from a validated env. */
-export function buildBootstrapUrls(env: BootstrapEnv): BootstrapUrls {
+/** Build the TCP/WS/relay multiaddrs from a validated env (server OR client). */
+export function buildBootstrapUrls(env: BootstrapUrlsInput): BootstrapUrls {
   const hostPrefix = hostToMultiaddrPrefix(env.host);
   const peerSuffix = `/p2p/${env.peerId}`;
   return {
@@ -287,7 +339,12 @@ function parseBoolKey(raw: Record<string, string>, key: string, fallback: boolea
 }
 
 /**
- * Load and validate the bootstrap env from the configured source.
+ * Load and validate the bootstrap **server** env from the configured source.
+ *
+ * SERVER ONLY — this is the one loader that requires `BOOTSTRAP_SEED_HEX`,
+ * because the bootstrap server is the one component whose peer ID is derived from
+ * a word sequence. A client component (agent app, utility server) must use
+ * {@link loadBootstrapClientEnv} instead, which never reads a seed.
  *
  * Throws with an actionable message on any missing/malformed field — never
  * returns a partially-populated config, and never falls back to a hardcoded
@@ -322,7 +379,52 @@ export function loadBootstrapEnv(opts: LoadBootstrapEnvOptions = {}): BootstrapE
 }
 
 /**
+ * Load and validate a bootstrap **client** env from the configured source.
+ *
+ * This is the loader for the agent app and the utility server. Both are clients:
+ * they only need to know where the bootstrap server is and which peer ID to
+ * expect, so they read `BOOTSTRAP_HOST` + `BOOTSTRAP_PEER_ID` (both REQUIRED —
+ * there is no seed to derive the peer ID from) plus the ports.
+ *
+ * A `BOOTSTRAP_SEED_HEX` in a client `.env` is REJECTED rather than ignored: a
+ * seed in a client file is a leaked private key with no client use, and silently
+ * tolerating it is how it stays there. Re-running
+ * `npm run init:bootstrap -- --component <name>` removes it.
+ */
+export function loadBootstrapClientEnv(opts: LoadBootstrapEnvOptions = {}): BootstrapClientEnv {
+  const source = opts.source ?? nodeEnvSource();
+  const raw = source.read(opts.path);
+
+  if (raw.BOOTSTRAP_SEED_HEX?.trim()) {
+    throw new Error(
+      `bootstrap env (${source.name}): BOOTSTRAP_SEED_HEX is present, but this component is a ` +
+      'CLIENT. Only the bootstrap server holds the seed — remove the line and keep ' +
+      'BOOTSTRAP_PEER_ID + BOOTSTRAP_HOST (re-run `npm run init:bootstrap -- --component ' +
+      '<bootstrap|utility-server|agent>` to rewrite the file).',
+    );
+  }
+
+  const host = requireKey(raw, 'BOOTSTRAP_HOST', source.name);
+  const peerId = requireKey(raw, 'BOOTSTRAP_PEER_ID', source.name);
+  const tcpPort = parseIntKey(raw, 'BOOTSTRAP_TCP_PORT', 4001, source.name);
+  const wsPort = parseIntKey(raw, 'BOOTSTRAP_WS_PORT', 4002, source.name);
+  const enableRelay = parseBoolKey(raw, 'BOOTSTRAP_ENABLE_RELAY', true);
+
+  return {
+    version: 1,
+    peerId,
+    host,
+    tcpPort,
+    wsPort,
+    enableRelay,
+  };
+}
+
+/**
  * Verify that `env.peerId` (when present) matches `env.seedHex`.
+ *
+ * SERVER ONLY — the seed is what the check is against, so there is nothing for a
+ * client to verify here.
  *
  * Async because peer-ID derivation is async. Returns the resolved peer ID —
  * filling it in when the `.env` omitted `BOOTSTRAP_PEER_ID` — so a caller can

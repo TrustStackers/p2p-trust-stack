@@ -48,7 +48,7 @@ import { getVtaPaths } from '@p2p-trust-stack/core/platform/p2pts-home.js';
  * The directory is cleaned up after the test.
  */
 function makeTempRegistry(): { registry: AgentRegistry; dir: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), 'p2pts-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'lp2ptoip-test-'));
   // AgentRegistry(dbPath?, keystorePath?, p2ptsHome?) — passing `dir` as the
   // single arg would set it as dbPath while P2PTS_HOME stays the real user dir,
   // which pollutes/interferes with the real on-disk store. Pass it as p2ptsHome

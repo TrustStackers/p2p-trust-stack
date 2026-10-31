@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { createAgentStack, type TrustStack } from '../../src/index.js';
 
@@ -200,7 +201,7 @@ test('the bus is wired to every runtime callback the catalogue promises', () => 
   // show up in behaviour until a ceremony actually ran. Asserted at the source, in the same spirit as the
   // delegation guards.
   const src = readFileSync(
-    new URL('../../src/client/trust-stack.ts', import.meta.url).pathname,
+    fileURLToPath(new URL('../../src/client/trust-stack.ts', import.meta.url)),
     'utf8',
   );
   const REQUIRED = [
@@ -241,7 +242,7 @@ const KNOWN_UNEMITTED: ReadonlyArray<[string, string]> = [
 
 test('every catalogue event that has a declared payload is emitted by SOMETHING', async () => {
   const catalogue = readFileSync(
-    new URL('../../src/events/catalog.ts', import.meta.url).pathname,
+    fileURLToPath(new URL('../../src/events/catalog.ts', import.meta.url)),
     'utf8',
   );
   // Every `'name': { payload }` line is an event with a declared payload, i.e. one a caller can subscribe to.
@@ -252,7 +253,7 @@ test('every catalogue event that has a declared payload is emitted by SOMETHING'
   // client root all count.
   const emitted = new Set<string>();
   for (const dir of ['client', 'domains', 'events']) {
-    const base = new URL(`../../src/${dir}/`, import.meta.url).pathname;
+    const base = fileURLToPath(new URL(`../../src/${dir}/`, import.meta.url));
     for (const entry of readdirSync(base)) {
       if (!entry.endsWith('.ts')) continue;
       const src = readFileSync(base + entry, 'utf8');

@@ -161,7 +161,7 @@ export class Libp2pTransport implements TspTransport {
               const known = await this.node.peerStore.get(connection.remotePeer);
               multiaddrs = (known?.addresses ?? []).map((a) => a.multiaddr.toString());
             } catch { /* no address-book entry for this peer yet */ }
-            this.messageHandler?.(data.subarray(), {
+            this.dispatchMessage(data.subarray(), {
               peerId,
               multiaddrs: multiaddrs.length > 0 ? multiaddrs : [connection.remoteAddr.toString()],
             });
@@ -338,6 +338,54 @@ export class Libp2pTransport implements TspTransport {
   // ---------------------------------------------------------------------------
   // onMessage() — register the incoming message handler
   // ---------------------------------------------------------------------------
+
+  /**
+   * Dispatch one inbound frame to the registered handler WITHOUT letting a
+   * handler failure escape this read loop.
+   *
+   * WHY THIS IS NOT A BARE CALL — and why it is deliberately NOT `await`ed.
+   *
+   * `onMessage()` handlers are written as `async` (the utility server's TSP
+   * bridge is), so a bare call returns a promise nobody holds. A rejection inside
+   * the handler is then an UNHANDLED REJECTION, and Node's default
+   * (`--unhandled-rejections=throw`) escalates that to a fatal error — the
+   * process exits.
+   *
+   * Observed 2026-10-29 on the utility server: a transient YugabyteDB error
+   * (`XX000`, `tserver_shared_mem.cc`: "Timed out waiting kResponseSent, state:
+   * kProcessingRequest") propagated out of the bridge's `routeProtocolMessage()`,
+   * escaped the fire-and-forget dispatch, and terminated the server after ~a
+   * night of otherwise-normal operation. A storage hiccup must not be fatal.
+   *
+   * It is NOT `await`ed on purpose: handler work is per-message and concurrent
+   * by design, so awaiting here would serialise frames and back-pressure the
+   * stream. This keeps the concurrency contract and adds only the missing error
+   * boundary.
+   */
+  private dispatchMessage(message: Uint8Array, fromAddr: TransportAddress): void {
+    let result: unknown;
+    try {
+      result = this.messageHandler?.(message, fromAddr);
+    } catch (err) {
+      // A handler that throws SYNCHRONOUSLY (before its first `await`) is the
+      // same failure as a rejection, just delivered by a different mechanism.
+      logger.error(
+        `[Libp2pTransport] inbound handler threw peerId=${fromAddr.peerId.slice(0, 12)}...:`,
+        (err as Error)?.message ?? err,
+      );
+      return;
+    }
+    // A handler may be sync (returns undefined) or async (returns a promise);
+    // only a thenable can reject.
+    if (result != null && typeof (result as PromiseLike<unknown>).then === 'function') {
+      void (result as Promise<unknown>).catch((err: unknown) => {
+        logger.error(
+          `[Libp2pTransport] inbound handler failed peerId=${fromAddr.peerId.slice(0, 12)}...:`,
+          (err as Error)?.message ?? err,
+        );
+      });
+    }
+  }
 
   /**
    * Register a handler for incoming TSP messages.

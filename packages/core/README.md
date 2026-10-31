@@ -51,7 +51,7 @@ const transport = new Libp2pTransport(node);
 | `@p2p-trust-stack/core/db` | DataSource abstraction, migrations (20 shipped `.sql` files), typed repositories |
 | `@p2p-trust-stack/core/services` | Shared business logic (VTA/VTC creation, profiles, recovery, policy engine, credential factory) |
 | `@p2p-trust-stack/core/platform` | `P2PTS_HOME` resolution and network detection |
-| `@p2p-trust-stack/core/config` | Bootstrap/relay config loader (typed `.env` → `BootstrapEnv`, `buildBootstrapUrls`) |
+| `@p2p-trust-stack/core/config` | Config loaders (typed `.env` → `BootstrapEnv`, `buildBootstrapUrls`; logging block → `applyLoggingEnv`) |
 | `@p2p-trust-stack/core/tsp-handlers` | TSP protocol envelope types |
 | `@p2p-trust-stack/core/util` | Small shared utilities (leveled `logger`, dedup log) |
 
@@ -97,6 +97,35 @@ import { setLogLevel, setLogSink } from '@p2p-trust-stack/core/util/logger';
 setLogLevel('debug');                                    // or 'silent'
 setLogSink((level, args) => myLogger[level](...args));   // route instead of suppress
 ```
+
+### Setting it from a config file instead
+
+`P2PTS_LOG_LEVEL=info node …` is POSIX-shell syntax, so it cannot live in a
+`package.json` script that has to run on Windows, and it does not exist at all where a
+native host launches Node (Capacitor). `config/logging-env.ts` reads the same two keys
+out of a `.env`, so an app can keep its verbosity in a file:
+
+```ts
+import { applyLoggingEnv } from '@p2p-trust-stack/core/config/logging-env';
+
+applyLoggingEnv({ path: '/etc/my-app/.env' });   // cannot throw
+```
+
+```
+# .env
+P2PTS_LOG_LEVEL=info
+CEREMONY_TRACE=1
+```
+
+The resolved order is **`setLogLevel()` > the config file > `P2PTS_LOG_LEVEL` > the
+default**, so an embedder's explicit call always wins, and the environment variable
+still works exactly as documented above. A missing, unreadable or malformed file is
+never fatal — it just leaves logging at the next rung. `getEffectiveLogging()` reports
+what is actually in force.
+
+`CEREMONY_TRACE=1` is separate from the level on purpose: it emits the `[CEREMONY]`
+OOBI→RFI→RFA trace lines and is **not** silenced by `P2PTS_LOG_LEVEL=silent`, nor
+switched on by `debug`. `setCeremonyTrace()` overrides it programmatically.
 
 ## License
 

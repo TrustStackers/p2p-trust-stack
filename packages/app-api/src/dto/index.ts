@@ -24,14 +24,18 @@ export type {
   HealthDto,
   ReadyDto,
   ConnectivityStatusDto,
+  ConnectivityFailureKind,
   DiscoveredPeerDto,
   NetworkProfileDto,
   BootstrapStatusDto,
   BootstrapRefreshDto,
   UtilityServerStatusDto,
+  VtnOptionDto,
   PushIdentityDto,
   OobiDto,
   ConnectionEventDto,
+  BootstrapConfigView,
+  BootstrapClientEnv,
 } from './connectivity.js';
 
 export type { RegisterResultDto, ResolvedNameDto, NameEntryDto } from './names.js';

@@ -10,9 +10,43 @@
  * Read **per call**, not at import time: a module-level constant would freeze the flag when this
  * module is first loaded, so a process that hosts an embedder (or a test) could not turn tracing
  * on or off afterwards. The read is a cheap property lookup on an already-populated object.
+ *
+ * ## Why there is also a setter
+ *
+ * The environment variable is not reachable everywhere this module runs. An app whose
+ * `package.json` script cannot assign one (Windows), or that is launched by a native
+ * host rather than npm (the Capacitor mobile build), has no way to set it — so the
+ * flag is also settable programmatically and from a config file, via
+ * {@link setCeremonyTrace} / `config/logging-env.ts`. Precedence mirrors the logger:
+ *
+ *   setCeremonyTrace() override  >  CEREMONY_TRACE env var  >  off
+ *
+ * Tracing stays independent of the log level on purpose: it is an opt-in diagnostic
+ * that must not be silenced by `P2PTS_LOG_LEVEL=silent`, and not be switched on by
+ * `P2PTS_LOG_LEVEL=debug`.
  */
+
+/** The environment variable that turns tracing on when no override is set. */
+export const CEREMONY_TRACE_ENV = 'CEREMONY_TRACE';
+
+let overrideTrace: boolean | undefined;
+
+/**
+ * Turn tracing on/off for this process, or pass `undefined` to fall back to the
+ * `CEREMONY_TRACE` environment variable.
+ */
+export function setCeremonyTrace(enabled: boolean | undefined): void {
+  overrideTrace = enabled;
+}
+
+/** Whether a `[CEREMONY]` line would be emitted right now. */
+export function isCeremonyTraceEnabled(): boolean {
+  if (overrideTrace !== undefined) return overrideTrace;
+  return process.env[CEREMONY_TRACE_ENV] === '1' || process.env[CEREMONY_TRACE_ENV] === 'true';
+}
+
 function isEnabled(): boolean {
-  return process.env.CEREMONY_TRACE === '1' || process.env.CEREMONY_TRACE === 'true';
+  return isCeremonyTraceEnabled();
 }
 
 function short(v: string | undefined, len = 8): string {

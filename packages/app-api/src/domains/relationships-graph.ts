@@ -144,6 +144,24 @@ function resolveLocalUuid(canonicalize: Map<string, string>, uuid: string): stri
 }
 
 /**
+ * Append the VTN key to a display label: `Utility Server` → `Utility Server (p2pts)`.
+ *
+ * The key is the VTN this agent joined (`config.yaml` → `vtn:`), the identifier
+ * agents match on and the one the bootstrap dashboard renders as
+ * `Utl Server (p2pts)`. This mirrors the utility server's own graph so both
+ * views name the same network.
+ *
+ * Idempotent: a label equal to the key, or already carrying `(key)`, is left
+ * alone — a VTN whose configured name IS the key must not read `p2pts (p2pts)`.
+ */
+function withVtnKey(label: string, vtnKey: string | null | undefined): string {
+  const key = (vtnKey ?? '').trim();
+  if (!key || !label) return label;
+  if (label === key || label.endsWith(`(${key})`)) return label;
+  return `${label} (${key})`;
+}
+
+/**
  * Build the ephemeral-`did:peer:4` → real-VTA uuid map, plus per-identity display metadata.
  *
  * Mirrors the utility server's `GET /graph/edges?format=graph` canonicalization so both sides agree on which
@@ -228,10 +246,12 @@ async function buildLocalCanonicalizationMap(db: DataSource): Promise<{
  * @param db       the active agent's database.
  * @param selfDid  the active agent's DID — its node is always present, even with zero edges.
  * @param selfName the active agent's name, used as its own node label.
+ * @param vtnKey   the VTN this agent joined (`config.yaml` → `vtn:`), appended to the
+ *                 utility-server/VTN node labels. Omitted when no network was chosen.
  */
 export async function buildGraph(
   db: DataSource,
-  opts: { selfDid: string; selfName: string | null },
+  opts: { selfDid: string; selfName: string | null; vtnKey?: string },
 ): Promise<GraphDto> {
   const { canonicalize, metaByUuid } = await buildLocalCanonicalizationMap(db);
   const selfUuid = await resolveIdentityUuid(db, opts.selfDid);
@@ -377,20 +397,29 @@ export async function buildGraph(
     const isSelf = uuid === selfUuid;
     const subjectKind = meta?.subjectKind ?? 'human';
     const role = meta?.role ?? 'vta';
+    const baseLabel = isSelf
+      ? (opts.selfName || 'Me')
+      : friendlyLabel(
+          {
+            name: meta?.name ?? null,
+            registeredName: meta?.registeredName ?? null,
+            namespace: meta?.namespace ?? null,
+            subjectKind,
+            vid: meta?.vid ?? null,
+          },
+          uuid,
+        );
+    // The node that IS the utility server appears in two shapes: the VTN this
+    // agent joined (`role='vtn'`) and the server's own organization VTA
+    // (`role='vta'`, `subject_kind='organization'`). Both carry the chosen VTN
+    // key so the graph names the NETWORK (`utility-server (p2pts)`), matching
+    // the bootstrap dashboard and the utility server's own graph. Self is
+    // excluded — the agent's own node label is its name, never a network key.
+    const isUtilityServerNode =
+      !isSelf && (role === 'vtn' || (role === 'vta' && subjectKind === 'organization'));
     nodes.push({
       id: uuid,
-      label: isSelf
-        ? (opts.selfName || 'Me')
-        : friendlyLabel(
-            {
-              name: meta?.name ?? null,
-              registeredName: meta?.registeredName ?? null,
-              namespace: meta?.namespace ?? null,
-              subjectKind,
-              vid: meta?.vid ?? null,
-            },
-            uuid,
-          ),
+      label: isUtilityServerNode ? withVtnKey(baseLabel, opts.vtnKey) : baseLabel,
       role,
       subjectKind,
       isSelf,

@@ -1,6 +1,6 @@
 {
   "name": "@p2p-trust-stack/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "P2P Trust Stack core — libp2p-based Trust Spanning Protocol (TSP), decentralized DID creation/rotation, an encrypted SQLite keystore, relationships/OOBI, Verified Trust Communities (VTCs) and verifiable credentials.",
   "type": "module",
   "license": "(GPL-3.0-only OR LicenseRef-TrustStackers-Commercial)",

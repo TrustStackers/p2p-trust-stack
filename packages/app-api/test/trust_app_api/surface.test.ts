@@ -28,9 +28,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** The interface moved here in P1 (`agent-app/src/` → `trust-app-api/runtime/`). */
-const HANDLE_PATH = new URL('../../src/runtime/handle.ts', import.meta.url).pathname;
+const HANDLE_PATH = fileURLToPath(new URL('../../src/runtime/handle.ts', import.meta.url));
 
 const INTERFACE_HEADER = 'export interface AgentHandle {';
 
@@ -44,6 +45,11 @@ const EXPECTED_MEMBERS: string[] = [
   'sendMessage', 'sendConfidentialMessage',
   'onMessage', 'onRelationshipChange', 'onConnectionEvent', 'onNetworkChange',
   'refreshBootstrapPeers', 'isBootstrapConnected', 'getBootstrapRelayAddr', 'getDiscoveredPeers',
+  // Added 2026-10-19: the VTN identity. `getNet` reports the VTN key this agent
+  // registers as (`net`); `setNet` adopts a different one and re-registers. Both
+  // optional so an agent implementation without VTN switching still satisfies the
+  // contract, and the login flow null-checks them.
+  'getNet', 'setNet',
   'reRegisterWithBootstrap',
   'getConnectivityStatus', 'getNetworkProfile', 'isNetworkChanged', 'getClientSourceAddr',
   'createProfile', 'listProfiles', 'updateProfile', 'removeProfile',
@@ -96,6 +102,10 @@ const EXPECTED_MEMBERS: string[] = [
  */
 const EXPECTED_OPTIONAL: string[] = [
   'getDbHandle',
+  // Added 2026-10-19: the VTN identity (see the members list above). Optional for
+  // the same reason as the other capability methods — a stack that cannot switch
+  // VTN must still be usable, so every caller null-checks them.
+  'getNet', 'setNet',
   'getConnectivityStatus',
   'createVtn', 'listVtcs', 'affiliateVtc', 'unaffiliateVtc', 'getVtnHierarchy',
   // Added 2026-10-09 (Group A): the single-admin issuance path. Optional because it is a CAPABILITY — a
@@ -177,24 +187,24 @@ test('AgentHandle exists at the expected path', () => {
   assert.ok(existsSync(HANDLE_PATH), `${HANDLE_PATH} is missing`);
 });
 
-test('AgentHandle member list is unchanged (101 members, in order)', () => {
+test('AgentHandle member list is unchanged (103 members, in order)', () => {
   const { members } = parseAgentHandle(readFileSync(HANDLE_PATH, 'utf8'));
   assert.deepEqual(
     members,
     EXPECTED_MEMBERS,
     'AgentHandle changed shape — a contract change, not a test fix',
   );
-  assert.equal(members.length, 101);
+  assert.equal(members.length, 103);
 });
 
-test('AgentHandle optional-member count is unchanged (48 optional)', () => {
+test('AgentHandle optional-member count is unchanged (50 optional)', () => {
   const { optional } = parseAgentHandle(readFileSync(HANDLE_PATH, 'utf8'));
   assert.deepEqual(
     optional,
     EXPECTED_OPTIONAL,
     'the set of optional members changed — callers null-check exactly these',
   );
-  assert.equal(optional.length, 48);
+  assert.equal(optional.length, 50);
 });
 
 
@@ -202,7 +212,7 @@ test('AgentHandle optional-member count is unchanged (48 optional)', () => {
 // P2: the trust-app-api surface itself
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AGENT_API = new URL('../../src/', import.meta.url).pathname;
+const AGENT_API = fileURLToPath(new URL('../../src/', import.meta.url));
 
 function readDir(dir: string, ext = '.ts'): string[] {
   return readdirSync(dir)
@@ -241,7 +251,7 @@ test('the barrel re-exports NO runtime value — only the types `Host` signature
 
 test('API tests import only the public barrel — no runtime internals (R7)', () => {
   const offenders: string[] = [];
-  for (const file of readDir(new URL('.', import.meta.url).pathname)) {
+  for (const file of readDir(fileURLToPath(new URL('.', import.meta.url)))) {
     if (!file.endsWith('.test.ts') && !file.endsWith('harness.ts')) continue;
     const src = readFileSync(file, 'utf8');
     for (const m of src.matchAll(/from\s+'([^']+)'/g)) {

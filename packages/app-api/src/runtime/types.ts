@@ -11,6 +11,7 @@
 import type { DidMethod } from '@p2p-trust-stack/core/did/did-method.js';
 import type { TspTransport } from '@p2p-trust-stack/core/transport/types.js';
 import type { KeyStore } from '@p2p-trust-stack/core/keystore/types.js';
+import type { BootstrapClientEnv } from '@p2p-trust-stack/core/config/bootstrap-env.js';
 
 // ---------------------------------------------------------------------------
 // AgentConfig
@@ -26,10 +27,23 @@ export interface AgentConfig {
   didMethod?: DidMethod;
   bootstrapUrl?: string;
   /**
-   * Network/group (namespace) this agent is joining, e.g. 'p2pts'. Sent to the
-   * bootstrap/relay server as the peer's `net` and used to build the
-   * bootstrap-facing name `vta:<net>:<name>`. Defaults to 'p2pts'; the first-run
-   * setup wizard will set this from the chosen VTN.
+   * The bootstrap server this agent should dial — host + peer ID.
+   *
+   * The agent is a CLIENT: it holds no seed, only the address and the peer ID to
+   * expect. Supplied by the composition root (the startup screen's bootstrap
+   * boxes, persisted to `P2PTS_HOME/config.yaml`). When absent, the runtime falls
+   * back to this component's `.env`; when neither yields a usable pair the agent
+   * runs in LAN-only mode rather than failing to start.
+   */
+  bootstrapEnv?: BootstrapClientEnv;
+  /**
+   * The VTN key (namespace) this agent is joining, e.g. 'p2pts'.
+   *
+   * Sent to the bootstrap as the peer's `net`, so the agent identifies itself by
+   * the network it is ACTUALLY using and the bootstrap's peer list shows it.
+   * There is deliberately NO default: an agent that has not chosen a VTN yet
+   * sends no `net` at all, rather than claiming some other network's key. Set
+   * from the login screen's VTN picker.
    */
   net?: string;
   transport?: TspTransport;

@@ -12,8 +12,16 @@
  * ## Precedence
  *
  *   1. an explicit {@link setLogLevel} override, else
- *   2. the `P2PTS_LOG_LEVEL` environment variable, else
- *   3. the default — `warn`.
+ *   2. the level a host read from its own config file ({@link setConfigLogLevel},
+ *      applied by `config/logging-env.ts` from a component's `.env`), else
+ *   3. the `P2PTS_LOG_LEVEL` environment variable, else
+ *   4. the default — `warn`.
+ *
+ * Rung 2 exists because an environment variable cannot be set portably: a
+ * `package.json` script cannot assign one on Windows, and an app that launches
+ * its own Node runtime (the Capacitor mobile build) has no npm script at all. A
+ * config file can, so the level travels with the component — while rung 3 stays
+ * for embedders who documented `P2PTS_LOG_LEVEL` and still set it that way.
  *
  * The default is deliberately quiet: a library that logs on import makes its host
  * noisy, so only warnings and errors are emitted unless the host asks for more.
@@ -53,16 +61,19 @@ export const LOG_LEVEL_ENV = 'P2PTS_LOG_LEVEL';
 /** The level used when neither an override nor a valid env value is present. */
 export const DEFAULT_LOG_LEVEL: LogLevel = 'warn';
 
-function isLogLevel(v: string): v is LogLevel {
-  return v === 'silent' || v === 'error' || v === 'warn' || v === 'info' || v === 'debug';
-}
-
 let overrideLevel: LogLevel | undefined;
+let configLevel: LogLevel | undefined;
 let sink: LogSink | undefined;
 
-/** The level in effect right now (override > `P2PTS_LOG_LEVEL` > default). */
+/**
+ * The level in effect right now.
+ *
+ * `setLogLevel()` override > {@link setConfigLogLevel} (a component's config
+ * file) > `P2PTS_LOG_LEVEL` > {@link DEFAULT_LOG_LEVEL}.
+ */
 export function getLogLevel(): LogLevel {
   if (overrideLevel) return overrideLevel;
+  if (configLevel) return configLevel;
   const raw = process.env[LOG_LEVEL_ENV]?.trim().toLowerCase();
   return raw && isLogLevel(raw) ? raw : DEFAULT_LOG_LEVEL;
 }
@@ -74,6 +85,26 @@ export function getLogLevel(): LogLevel {
 export function setLogLevel(level: LogLevel | undefined): LogLevel {
   overrideLevel = level;
   return getLogLevel();
+}
+
+/**
+ * Record the level read from a component's config file.
+ *
+ * Deliberately a SEPARATE slot from {@link setLogLevel}, so the documented
+ * precedence holds: an embedder that calls `setLogLevel()` explicitly still wins
+ * over whatever the app's `.env` says, and a config file that names no level
+ * leaves `P2PTS_LOG_LEVEL` and the default in charge. Applied for you by
+ * `config/logging-env.ts`; call it directly only to drive the level from some
+ * other config source. Pass `undefined` to clear it.
+ */
+export function setConfigLogLevel(level: LogLevel | undefined): LogLevel {
+  configLevel = level;
+  return getLogLevel();
+}
+
+/** True when `v` is one of the levels this module understands. */
+export function isLogLevel(v: string): v is LogLevel {
+  return v === 'silent' || v === 'error' || v === 'warn' || v === 'info' || v === 'debug';
 }
 
 /**
