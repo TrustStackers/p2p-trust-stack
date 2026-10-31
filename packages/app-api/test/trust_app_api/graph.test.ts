@@ -30,7 +30,7 @@
  */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -419,4 +419,54 @@ test('debug() returns null for an unknown peer, and a truncated transport view f
   } finally { await ds.close(); }
 });
 
+// ---------------------------------------------------------------------------
+// 7. The joined VTN's key on the utility-server / VTN node labels
+// ---------------------------------------------------------------------------
+
+/**
+ * The agent graph names the network it joined — `utility-server (p2pts)` — just
+ * as the bootstrap dashboard does (`Utl Server (p2pts)`), and just as the
+ * utility server's own graph names the network it serves. The key is the
+ * `vtn:` value `bootstrapConfig.recordVtn()` writes to `config.yaml` when the
+ * user picks a VTN.
+ *
+ * Both shapes of the server are covered: the VTN identity the agent holds
+ * (`role='vtn'`) and the server's own organization VTA (`role='vta'`,
+ * `subject_kind='organization'`). A label that already IS the key must not
+ * double up, and an agent with no VTN chosen must keep the plain labels.
+ */
+test('the utility-server and VTN nodes carry the joined VTN key in their labels', async () => {
+  const { stack, ds, selfUuid } = await makeStack();
+  const SERVER = 'server-000';
+  const VTN = 'vtn-00000';
+  try {
+    // Nodes come from edge endpoints plus self, so each needs an edge: a peer
+    // relationship to the server, and a membership credential from the VTN.
+    await seedIdentity(ds, { uuid: SERVER, name: 'utility-server', subjectKind: 'organization' });
+    await seedIdentity(ds, { uuid: VTN, name: 'Trust Stackers', role: 'vtn', subjectKind: 'organization' });
+    await seedRelationship(ds, { uuid: 'rel-server', local: selfUuid, remote: SERVER });
+    await seedCredential(ds, { uuid: 'vmc-vtn', vcType: 'vmc', issuer: VTN, subject: selfUuid });
+
+    const configPath = join(stack.host.home, 'config.yaml');
+    writeFileSync(configPath, 'vtn: "p2pts"\n', 'utf-8');
+
+    const g = await stack.relationships.graph();
+    assert.equal(g.nodes.find((n) => n.id === SERVER)!.label, 'utility-server (p2pts)');
+    assert.equal(g.nodes.find((n) => n.id === VTN)!.label, 'Trust Stackers (p2pts)');
+    // Only the utility-server/VTN nodes are annotated — the agent names itself.
+    assert.equal(g.nodes.find((n) => n.id === selfUuid)!.label, AGENT);
+
+    // No VTN chosen → the labels are exactly what they were before the suffix existed.
+    rmSync(configPath, { force: true });
+    const plain = await stack.relationships.graph();
+    assert.equal(plain.nodes.find((n) => n.id === SERVER)!.label, 'utility-server');
+    assert.equal(plain.nodes.find((n) => n.id === VTN)!.label, 'Trust Stackers');
+
+    // A VTN whose own name IS the key must not read `p2pts (p2pts)`.
+    await ds.run(`UPDATE identities SET name = 'p2pts' WHERE uuid = ?`, VTN);
+    writeFileSync(configPath, 'vtn: "p2pts"\n', 'utf-8');
+    const named = await stack.relationships.graph();
+    assert.equal(named.nodes.find((n) => n.id === VTN)!.label, 'p2pts');
+  } finally { await ds.close(); }
+});
 

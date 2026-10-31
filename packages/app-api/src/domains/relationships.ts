@@ -19,6 +19,7 @@ import { requireAgent, type DomainContext } from './context.js';
 import { StackError } from '../errors.js';
 import { resolvePeerAgentName } from '../runtime/peer-name.js';
 import { SqliteDataSource } from '@p2p-trust-stack/core/db/sqlite-data-source.js';
+import { loadP2ptsConfig } from '@p2p-trust-stack/core/platform/p2pts-home.js';
 import * as identitiesRepo from '@p2p-trust-stack/core/db/repositories/identities-repo.js';
 import { generatePersonhoodChallenge } from '@p2p-trust-stack/core/services/verified-channel.js';
 import { getDtgRelationshipCredentials, isDtgVerifiedChannel } from '@p2p-trust-stack/core/services/verified-channel.js';
@@ -456,7 +457,17 @@ export function createRelationshipsApi(ctx: DomainContext): RelationshipsApi {
       const agent = requireAgent(ctx, 'read the relationship graph');
       const ds = ctx.host.storageFor(agent.getName()) as SqliteDataSource;
       try {
-        return await buildGraph(ds, { selfDid: agent.getDid(), selfName: agent.getName() });
+        // The VTN this agent joined — `config.yaml`'s `vtn:` key, which is what
+        // `bootstrapConfig.recordVtn()` writes when the user picks a network and
+        // what the bootstrap registers. `buildGraph` appends it to the
+        // utility-server/VTN node labels so the graph names the network it is
+        // connected to. Absent when no VTN was chosen: the labels stay plain.
+        const vtnKey = loadP2ptsConfig(ctx.host.home).vtn.trim() || undefined;
+        return await buildGraph(ds, {
+          selfDid: agent.getDid(),
+          selfName: agent.getName(),
+          vtnKey,
+        });
       } finally {
         await ds.close();
       }

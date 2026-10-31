@@ -382,15 +382,24 @@ test('revoke() round-trips by UUID — the addressing no consumer could supply b
   const identitiesRepo = await import('@p2p-trust-stack/core/db/repositories/identities-repo.js');
   const ds = stack.host.storageFor(name) as InstanceType<typeof SqliteDataSource>;
 
-  const me = await identitiesRepo.findByRealDid(ds, (await stack.identity.current()).did!);
-  assert.ok(me, 'the active identity has a row');
+  // Seeded through a direct handle that is CLOSED before the assertions below. On Windows an
+  // open handle makes the agent's database undeletable, so holding one until the process exits
+  // failed this file's temp-home teardown with EPERM — POSIX tolerates it, which is why this
+  // only ever showed up on Windows.
+  let uuid: string;
+  try {
+    const me = await identitiesRepo.findByRealDid(ds, (await stack.identity.current()).did!);
+    assert.ok(me, 'the active identity has a row');
 
-  const uuid = await credentialsRepo.create(ds, {
-    vcType: 'vrc',
-    issuerIdentityUuid: me.uuid,
-    subjectIdentityUuid: me.uuid,
-    validFrom: Math.floor(Date.now() / 1000),
-  });
+    uuid = await credentialsRepo.create(ds, {
+      vcType: 'vrc',
+      issuerIdentityUuid: me.uuid,
+      subjectIdentityUuid: me.uuid,
+      validFrom: Math.floor(Date.now() / 1000),
+    });
+  } finally {
+    await ds.close();
+  }
 
   // The uuid IS the address, and it is published: `StoredCredentialDto.uuid`.
   const listed = (await stack.credentials.list()).find((c) => c.source === 'dtg' && c.uuid === uuid);

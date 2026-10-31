@@ -252,9 +252,19 @@ export class ScidVhAgent extends BaseAgent {
     agent.meta = meta;
 
     const unlockDb = new AgentDatabase(registry.getDbPath(config.name), registry.getKeystorePath(config.name));
-    agent.scidVhMethod.setStore(unlockDb.rotationLogStore);
-
-    await agent.loadIdentity();
+    try {
+      agent.scidVhMethod.setStore(unlockDb.rotationLogStore);
+      await agent.loadIdentity();
+    } finally {
+      // Released here for the same reason as the `tempDb` in `initIdentity()`: the store is
+      // needed only to resolve the identity at unlock time, and `wireUpAfterStart()` swaps in
+      // the LIVE database's store on start(). Holding this second connection to the agent's
+      // database for the agent's whole lifetime is invisible on POSIX, but on Windows it makes
+      // the agent's directory undeletable (`EBUSY`) even after `stop()` — which is what broke
+      // `npm test` on Windows. `finally` also covers the wrong-passphrase path, where no agent
+      // is returned for anyone else to close.
+      unlockDb.close();
+    }
     return agent;
   }
 

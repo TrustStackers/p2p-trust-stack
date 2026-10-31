@@ -371,6 +371,28 @@ export interface P2ptsConfig {
   default_vta_name: string;
   utility_server_url: string;
   passphrase_session_timeout_sec: number;
+  /**
+   * Bootstrap host this machine dials — DNS name or fixed public IP.
+   *
+   * The DEFAULT comes from the component's `.env`; this field records an
+   * override the user typed into the agent app's startup screen. Empty means
+   * "use the `.env` value".
+   */
+  bootstrap_host: string;
+  /**
+   * Bootstrap peer ID to expect — the client's only copy of the server's
+   * identity (a client holds no seed). Empty means "use the `.env` value".
+   */
+  bootstrap_peer_id: string;
+  /**
+   * The VTN key (namespace) this machine last connected to, e.g. `p2pts`.
+   *
+   * Sent to the bootstrap as the peer's `net` so the agent identifies itself by
+   * the VTN it is actually using. Empty means "not chosen yet" — the `net` field
+   * is then omitted from registration rather than defaulted to some other
+   * network's key.
+   */
+  vtn: string;
 }
 
 const DEFAULT_CONFIG: P2ptsConfig = {
@@ -378,6 +400,9 @@ const DEFAULT_CONFIG: P2ptsConfig = {
   default_vta_name: '',
   utility_server_url: '',
   passphrase_session_timeout_sec: 900,
+  bootstrap_host: '',
+  bootstrap_peer_id: '',
+  vtn: '',
 };
 
 /**
@@ -408,6 +433,15 @@ export function loadP2ptsConfig(p2ptsHome?: string): P2ptsConfig {
       passphrase_session_timeout_sec: typeof parsed.passphrase_session_timeout_sec === 'number'
         ? parsed.passphrase_session_timeout_sec
         : DEFAULT_CONFIG.passphrase_session_timeout_sec,
+      bootstrap_host: typeof parsed.bootstrap_host === 'string'
+        ? parsed.bootstrap_host
+        : DEFAULT_CONFIG.bootstrap_host,
+      bootstrap_peer_id: typeof parsed.bootstrap_peer_id === 'string'
+        ? parsed.bootstrap_peer_id
+        : DEFAULT_CONFIG.bootstrap_peer_id,
+      vtn: typeof parsed.vtn === 'string'
+        ? parsed.vtn
+        : DEFAULT_CONFIG.vtn,
     };
   } catch {
     return { ...DEFAULT_CONFIG };
@@ -432,6 +466,9 @@ export function saveP2ptsConfig(config: P2ptsConfig, p2ptsHome?: string): void {
   lines.push(`default_vta_name: "${config.default_vta_name}"`);
   lines.push(`utility_server_url: "${config.utility_server_url}"`);
   lines.push(`passphrase_session_timeout_sec: ${config.passphrase_session_timeout_sec}`);
+  lines.push(`bootstrap_host: "${config.bootstrap_host}"`);
+  lines.push(`bootstrap_peer_id: "${config.bootstrap_peer_id}"`);
+  lines.push(`vtn: "${config.vtn}"`);
   lines.push('');
 
   writeFileSync(configPath, lines.join('\n'), 'utf-8');

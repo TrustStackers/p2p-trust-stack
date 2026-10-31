@@ -59,10 +59,25 @@ class MockTransport implements TspTransport {
   public sent: Array<{ message: Uint8Array; to: TransportAddress }> = [];
   private handler?: (message: Uint8Array, fromAddr: TransportAddress) => void;
 
+  /**
+   * When set, the NEXT send throws this message and the flag clears itself.
+   *
+   * Reproduces a transport-level send failure without a network — the exact
+   * shape of the field failure of 2026-10-29, where libp2p's dial returned a
+   * connection that had already closed and `transport.send` threw
+   * `Remote closed connection during opening`.
+   */
+  public failNextSendWith?: string;
+
   async start(): Promise<void> {}
   async stop(): Promise<void> {}
 
   async send(message: Uint8Array, remoteAddr: TransportAddress): Promise<void> {
+    if (this.failNextSendWith !== undefined) {
+      const reason = this.failNextSendWith;
+      this.failNextSendWith = undefined;
+      throw new Error(reason);
+    }
     this.sent.push({ message: new Uint8Array(message), to: remoteAddr });
   }
 
@@ -220,6 +235,101 @@ test('RelationshipManager.sendRfi: stores outbound-pending record and sends RFI 
   assert.ok(record, 'A must have a relationship record for B');
   assert.equal(record!.direction, 'outbound', 'record direction must be outbound');
   assert.equal(record!.status, 'pending', 'record status must be pending');
+});
+
+// ---------------------------------------------------------------------------
+// sendRfi: a FAILED send must not orphan the outbound-pending row
+//
+// Field bug, MBP2014, 2026-10-29. The row is inserted before the send (so an
+// immediately-arriving RFA can be matched), and the send then threw
+// `Remote closed connection during opening`. The row survived, and because an
+// outbound-pending row means "handshake in progress" to the reconnect path —
+// and `insertOutbound` refuses a duplicate — every later attempt could only
+// WAIT for a handshake that had never started. The agent logged five identical
+// 30 s timeouts and stayed down until the app was restarted.
+// ---------------------------------------------------------------------------
+
+test('RelationshipManager.sendRfi: a FAILED send leaves NO outbound-pending record', async () => {
+  const a = makeIdentity('12D3KooWPeerA', ['/ip4/127.0.0.1/tcp/4001']);
+  const b = makeIdentity('12D3KooWPeerB', ['/ip4/127.0.0.1/tcp/4002']);
+
+  const bOobi = encodeOobi({
+    cesrVid: b.identity.cesrVid,
+    did: b.identity.did,
+    peerId: '12D3KooWPeerB',
+    multiaddrs: ['/ip4/127.0.0.1/tcp/4002'],
+  });
+
+  // Reproduce the field failure exactly: the transport dies while opening.
+  a.transport.failNextSendWith = 'Remote closed connection during opening';
+  await assert.rejects(
+    () => a.manager.sendRfi(bOobi),
+    /Remote closed connection during opening/,
+    'the send failure must propagate to the caller',
+  );
+
+  // The row must be gone: nothing is in flight, so nothing may claim it is.
+  assert.equal(
+    a.store.get(a.identity.did, b.identity.did),
+    undefined,
+    'a failed send must not leave an outbound-pending row behind',
+  );
+  assert.equal(a.transport.sent.length, 0, 'no message may have been recorded as sent');
+
+  // And a retry must be POSSIBLE. Before the rollback this threw
+  // `RelationshipStore.insertOutbound: relationship already exists` — which is
+  // what made the agent unable to reconnect until it was restarted.
+  await a.manager.sendRfi(bOobi);
+
+  const record = a.store.get(a.identity.did, b.identity.did);
+  assert.ok(record, 'the retry must store a fresh outbound-pending record');
+  assert.equal(record!.direction, 'outbound', 'retry record direction must be outbound');
+  assert.equal(record!.status, 'pending', 'retry record status must be pending');
+  assert.equal(a.transport.sent.length, 1, 'the retry must have sent exactly one RFI');
+});
+
+test('RelationshipManager.removeRelationship: clears the row so the handshake can be re-driven', async () => {
+  const a = makeIdentity('12D3KooWPeerA', ['/ip4/127.0.0.1/tcp/4001']);
+  const b = makeIdentity('12D3KooWPeerB', ['/ip4/127.0.0.1/tcp/4002']);
+
+  const bOobi = encodeOobi({
+    cesrVid: b.identity.cesrVid,
+    did: b.identity.did,
+    peerId: '12D3KooWPeerB',
+    multiaddrs: ['/ip4/127.0.0.1/tcp/4002'],
+  });
+
+  // A completed send leaves the row pending — the state the reconnect path has
+  // to be able to clear when the RFA never arrives.
+  await a.manager.sendRfi(bOobi);
+  assert.ok(a.store.get(a.identity.did, b.identity.did), 'precondition: row exists');
+
+  a.manager.removeRelationship(b.identity.did);
+  assert.equal(
+    a.store.get(a.identity.did, b.identity.did),
+    undefined,
+    'removeRelationship must clear the row',
+  );
+
+  // Re-driving the handshake now works instead of throwing `already exists`.
+  await a.manager.sendRfi(bOobi);
+  assert.equal(a.transport.sent.length, 2, 'the re-send must have gone out');
+  assert.equal(
+    a.store.get(a.identity.did, b.identity.did)!.status,
+    'pending',
+    'the re-driven handshake must be pending again',
+  );
+});
+
+test('RelationshipManager.removeRelationship: a no-op when there is no relationship', () => {
+  const a = makeIdentity('12D3KooWPeerA', ['/ip4/127.0.0.1/tcp/4001']);
+  const b = makeIdentity('12D3KooWPeerB', ['/ip4/127.0.0.1/tcp/4002']);
+
+  // Must not throw: the reconnect path calls it unconditionally on a row it
+  // believes is stale, and an unresolvable DID must not break the retry.
+  a.manager.removeRelationship(b.identity.did);
+  a.manager.removeRelationship('did:scid:vh:1:never-seen');
+  assert.equal(a.store.get(a.identity.did, b.identity.did), undefined);
 });
 
 // ---------------------------------------------------------------------------

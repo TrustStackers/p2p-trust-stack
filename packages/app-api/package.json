@@ -1,6 +1,6 @@
 {
   "name": "@p2p-trust-stack/app-api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "P2P Trust Stack app API — the agent runtime, host seam, DTOs and domain interfaces that applications program against.",
   "type": "module",
   "license": "(GPL-3.0-only OR LicenseRef-TrustStackers-Commercial)",
@@ -62,7 +62,7 @@
     "agent"
   ],
   "dependencies": {
-    "@p2p-trust-stack/core": "^0.1.0",
+    "@p2p-trust-stack/core": "0.2.0",
     "@chainsafe/libp2p-noise": "^17.0.0",
     "@chainsafe/libp2p-yamux": "^8.0.1",
     "@libp2p/circuit-relay-v2": "^4.2.8",

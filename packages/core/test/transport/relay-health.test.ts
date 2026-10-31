@@ -367,5 +367,46 @@ describe('relay-health: messages', () => {
     assert.match(copy, /kept locally/);
     assert.match(copy, /dial timeout/);
   });
+
+  it('does NOT promise "kept locally" for a CONNECTION (join) failure', () => {
+    // A failed JOIN queues nothing, so the mutation wording is a false promise —
+    // and it was the exact text users saw when a cross-network VTN join failed.
+    const down = deriveConnectivityStatus({
+      bootstrapConnected: true,
+      utilityServerConnected: false,
+      relay: snapshot([]),
+      hasRelayReservation: false,
+      lastError: 'dial timeout',
+    });
+
+    const joinCopy = describeConnectivityFailure(down, 'join the VTN "p2pts"', 'connection');
+    assert.match(joinCopy, /join the VTN "p2pts"/);
+    assert.doesNotMatch(joinCopy, /kept locally/);
+    assert.match(joinCopy, /try again shortly/i);
+    assert.match(joinCopy, /dial timeout/);
+
+    // The default kind keeps the mutation promise — pre-existing callers and
+    // their tests must not change behaviour.
+    assert.match(describeConnectivityFailure(down, 'publish this credential'), /kept locally/);
+  });
+
+  it('words the reconnecting layer per kind too', () => {
+    const reconnecting = deriveConnectivityStatus({
+      bootstrapConnected: true,
+      utilityServerConnected: false,
+      relay: snapshot([]),
+      hasRelayReservation: false,
+      reconnecting: true,
+    });
+
+    assert.match(
+      describeConnectivityFailure(reconnecting, 'join the VTN "p2pts"', 'connection'),
+      /being established/,
+    );
+    assert.match(
+      describeConnectivityFailure(reconnecting, 'publish this credential'),
+      /no data has been lost/,
+    );
+  });
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "p2p-trust-stack",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "P2P Trust Stack — a libp2p-based Trust Spanning Protocol (TSP) stack: decentralized DID creation and rotation, an encrypted SQLite keystore, relationships/OOBI, Verified Trust Communities and verifiable credentials.",
   "private": true,
   "type": "module",

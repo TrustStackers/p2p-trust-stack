@@ -79,6 +79,20 @@ export interface AgentHandle {
   isBootstrapConnected(): boolean;
   getBootstrapRelayAddr(): string | undefined;
   getDiscoveredPeers(): DiscoveredPeer[];
+  /**
+   * The VTN key this agent identifies itself by (undefined until one is chosen).
+   *
+   * Sent to the bootstrap as the peer's `net` — there is no default, so an agent
+   * that has not picked a VTN sends none rather than claiming another network's.
+   */
+  getNet?(): string | undefined;
+  /**
+   * Adopt a VTN and re-register with the bootstrap under that key.
+   *
+   * The login flow calls this once the user has picked from the discovered VTN
+   * list, so the agent is identified by the network it is actually using.
+   */
+  setNet?(net: string, onStatus?: (message: string) => void): Promise<void>;
   reRegisterWithBootstrap(onStatus?: (message: string) => void): Promise<void>;
   /**
    * LIVE connectivity status: bootstrap reachability, the circuit-relay grant

@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import {
   parseEnvText,
   loadBootstrapEnv,
+  loadBootstrapClientEnv,
   derivePeerIdFromSeedHex,
   buildBootstrapUrls,
   verifyBootstrapEnv,
@@ -119,6 +120,59 @@ test('loadBootstrapEnv from a missing file throws an actionable error', () => {
   assert.throws(
     () => loadBootstrapEnv({ path: '/nonexistent/definitely/not/here/.env' }),
     /Run `npm run init:bootstrap`/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// loadBootstrapClientEnv — the CLIENT shape (agent app / utility server)
+// ---------------------------------------------------------------------------
+
+test('loadBootstrapClientEnv reads host + peer ID and applies port defaults', () => {
+  const env = loadBootstrapClientEnv({
+    source: sourceOf({ BOOTSTRAP_PEER_ID: PEER_ID, BOOTSTRAP_HOST: 'mediator.example.com' }),
+  });
+  assert.equal(env.peerId, PEER_ID);
+  assert.equal(env.host, 'mediator.example.com');
+  assert.equal(env.tcpPort, 4001);
+  assert.equal(env.wsPort, 4002);
+  assert.equal(env.enableRelay, true);
+});
+
+test('loadBootstrapClientEnv requires the peer ID (there is no seed to derive it from)', () => {
+  assert.throws(
+    () => loadBootstrapClientEnv({ source: sourceOf({ BOOTSTRAP_HOST: 'x.example' }) }),
+    /missing BOOTSTRAP_PEER_ID/,
+  );
+});
+
+test('loadBootstrapClientEnv rejects a client .env that still carries the seed', () => {
+  // A seed in a client file is a leaked private key, and the client has no use
+  // for it — so it is a hard error, not something to quietly ignore.
+  assert.throws(
+    () => loadBootstrapClientEnv({
+      source: sourceOf({ ...validVars(), BOOTSTRAP_SEED_HEX: SEED }),
+    }),
+    /BOOTSTRAP_SEED_HEX is present, but this component is a CLIENT/,
+  );
+});
+
+test('loadBootstrapClientEnv rejects a missing host', () => {
+  assert.throws(
+    () => loadBootstrapClientEnv({ source: sourceOf({ BOOTSTRAP_PEER_ID: PEER_ID }) }),
+    /missing BOOTSTRAP_HOST/,
+  );
+});
+
+test('buildBootstrapUrls serves both env shapes', () => {
+  const client = loadBootstrapClientEnv({
+    source: sourceOf({ BOOTSTRAP_PEER_ID: PEER_ID, BOOTSTRAP_HOST: '203.0.113.5' }),
+  });
+  assert.equal(buildBootstrapUrls(client).tcpUrl, `/ip4/203.0.113.5/tcp/4001/p2p/${PEER_ID}`);
+
+  const server = loadBootstrapEnv({ source: sourceOf(validVars()) });
+  assert.equal(
+    buildBootstrapUrls(server).relayAddr,
+    `/dns/mediator.example.com/tcp/4001/p2p/${PEER_ID}/p2p-circuit`,
   );
 });
 

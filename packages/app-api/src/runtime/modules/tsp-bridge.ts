@@ -29,8 +29,19 @@
 
 import { encodeProtocolMessage, type ProtocolMessage } from '@p2p-trust-stack/core/tsp-handlers/types.js';
 import type { RelationshipManager } from '@p2p-trust-stack/core/relationship/manager.js';
+import type { RelationshipRecord } from '@p2p-trust-stack/core/relationship/types.js';
 import type { TspClientModule } from './tsp-client.js';
 import { logger } from '@p2p-trust-stack/core/util/logger.js';
+
+/**
+ * How long an RFI/RFA handshake is given to complete, in milliseconds.
+ *
+ * Doubles as the age after which an outbound-pending record is treated as DEAD
+ * rather than in flight: once a row has been waiting longer than a whole
+ * handshake window, nothing is going to complete it, so waiting again can only
+ * burn another 30 s.
+ */
+const HANDSHAKE_TIMEOUT_MS = 30_000;
 
 export interface TspBridgeDeps {
   /** Active relationship manager (has running transport + store). */
@@ -171,11 +182,40 @@ export class TspBridge {
         this.connected = true;
         return oobi.did;
       }
-      // Relationship exists but not yet bidirectional — wait for it
-      const serverDid = await this.waitForBidirectional(oobi.did, 30_000);
-      this.utilityServerDid = serverDid;
-      this.connected = true;
-      return serverDid;
+      // A pending row is NOT always "in flight". If its whole handshake window
+      // has already elapsed, nothing will ever complete it — and while it exists
+      // `sendRfi` refuses to run again (`insertOutbound` throws `already
+      // exists`), so waiting for it is a guaranteed 30 s failure that repeats on
+      // every reconnect tick, forever.
+      //
+      // That was the field bug of 2026-10-29 (MBP2014): one failed RFI send left
+      // such a row behind (the send is what failed — see `sendRfi`'s rollback,
+      // which now prevents the row being orphaned in the first place), and the
+      // agent then logged five identical `timed out waiting for bidirectional
+      // relationship` errors while its bootstrap and relay connections were
+      // healthy. Recovery required restarting the app and waiting out
+      // `pruneStaleOutbound`'s 5-minute window.
+      //
+      // Clearing the row and falling through to the send path below re-drives the
+      // handshake with the CURRENT OOBI — which also repairs the second half of
+      // the problem: the stored row pins the transport as it was at RFI time, and
+      // a utility server that has restarted has a new peer ID.
+      if (this.isStalePendingOutbound(existing)) {
+        logger.warn(
+          `[TspBridge] stale outbound-pending relationship with ${oobi.did.slice(0, 24)}… ` +
+          `(started ${Math.round(Date.now() / 1000 - existing.createdAt)}s ago, never completed) ` +
+          `— clearing it and re-sending the RFI instead of waiting for it.`,
+        );
+        this.manager.removeRelationship(oobi.did);
+      } else {
+        // Relationship exists but not yet bidirectional — wait for it. This is a
+        // row YOUNGER than one handshake window: an RFA may genuinely be on its
+        // way, and re-sending now would only duplicate the RFI.
+        const serverDid = await this.waitForBidirectional(oobi.did, HANDSHAKE_TIMEOUT_MS);
+        this.utilityServerDid = serverDid;
+        this.connected = true;
+        return serverDid;
+      }
     }
 
     // Initiate the relationship handshake.
@@ -184,12 +224,30 @@ export class TspBridge {
     await this.manager.sendRfi(this.utilityServerOobi, 'organization');
 
     // Wait for the relationship to become bidirectional (polling with timeout)
-    const serverDid = await this.waitForBidirectional(oobi.did, 30_000);
+    const serverDid = await this.waitForBidirectional(oobi.did, HANDSHAKE_TIMEOUT_MS);
 
     this.utilityServerDid = serverDid;
     this.connected = true;
 
     return serverDid;
+  }
+
+  /**
+   * Whether an existing record is an outbound handshake that has already had its
+   * full window and can therefore never complete on its own.
+   *
+   * AGE is the test, not status alone. A row younger than
+   * {@link HANDSHAKE_TIMEOUT_MS} may legitimately be in flight (the RFA is on its
+   * way), and re-sending then would duplicate the RFI; a row older than that has
+   * already had its wait and failed it.
+   *
+   * `created_at` is stored in unix SECONDS (`RelationshipStore` inserts
+   * `unixepoch()`), hence the /1000.
+   */
+  private isStalePendingOutbound(record: RelationshipRecord): boolean {
+    if (record.direction !== 'outbound' || record.status !== 'pending') return false;
+    const ageSeconds = Date.now() / 1000 - record.createdAt;
+    return ageSeconds > HANDSHAKE_TIMEOUT_MS / 1000;
   }
 
   /**

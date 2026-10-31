@@ -103,6 +103,34 @@ setLogLevel('silent');
 setLogSink((level, args) => myLogger[level](...args));   // route instead of suppress
 ```
 
+### Or from a config file, if a script cannot set a variable
+
+`P2PTS_LOG_LEVEL=info node …` is POSIX-shell syntax: it cannot go in a `package.json`
+script that must also run on Windows, and there is no npm script at all where a native
+host launches Node (Capacitor). `createLoggingConfigApi` keeps the setting in the app's
+`.env` instead — the same file the bootstrap block lives in:
+
+```ts
+import { createLoggingConfigApi } from '@p2p-trust-stack/app-api';
+
+const logging = createLoggingConfigApi({ envPath: '/etc/my-app/.env' });
+
+logging.apply();   // reads the .env and applies it; cannot throw
+logging.view();    // { level, ceremonyTrace, source: 'env' | 'default' }
+```
+
+```
+# .env
+P2PTS_LOG_LEVEL=info
+CEREMONY_TRACE=1
+```
+
+The resolved order is **`setLogLevel()` > the app's `.env` > `P2PTS_LOG_LEVEL` > the
+default**, so an explicit call always wins and the environment variable keeps working.
+A missing or malformed `.env` is never fatal. `CEREMONY_TRACE=1` is independent of the
+level — it emits the `[CEREMONY]` OOBI→RFI→RFA trace lines and is not silenced by
+`silent`, nor switched on by `debug`.
+
 ## License
 
 Dual-licensed under **GPL-3.0-only** or a commercial license — see the repository's

@@ -67,7 +67,11 @@ export type ScopedDomain =
  */
 const READ_METHODS: Readonly<Record<ScopedDomain, readonly string[]>> = {
   identity: ['current', 'recoveryState', 'lookup'],
-  connectivity: ['health', 'ready', 'status', 'utilityStatus', 'networkProfile', 'networkChanged', 'explainFailure'],
+  connectivity: [
+    'health', 'ready', 'status', 'utilityStatus', 'networkProfile', 'networkChanged', 'explainFailure',
+    // Observes the bootstrap peer directory — it changes nothing on the node.
+    'vtns',
+  ],
   relationships: ['oobi', 'list', 'get', 'ceremonyStatus', 'vrc', 'dtgVrc', 'graph', 'debug', 'duplicateNotice'],
   messaging: ['transcript', 'latest', 'unread'],
   profiles: ['list', 'claims', 'card', 'syncStatus'],
@@ -130,9 +134,13 @@ export const DENIED_METHODS: Readonly<Record<ScopedDomain, readonly string[]>> =
   ],
   connectivity: [
     // Host operations on the transport: re-running bootstrap discovery, dialing the utility server and pushing
-    // this identity to it. A context may OBSERVE connectivity (`health`/`ready`/`status`/`utilityStatus`) but
-    // must not rewire the node it shares with the host.
+    // this identity to it. A context may OBSERVE connectivity (`health`/`ready`/`status`/`utilityStatus`/`vtns`)
+    // but must not rewire the node it shares with the host.
     'refresh', 'connectUtility', 'pushIdentity',
+    // `connectVtn` is the same host operation with the VTN key adopted alongside it: it changes the `net` this
+    // agent registers under AND dials a utility server. Joining a network is the operator's choice at login, not
+    // something a scoped app context may do to the shared node.
+    'connectVtn',
   ],
   relationships: [],
   messaging: [],

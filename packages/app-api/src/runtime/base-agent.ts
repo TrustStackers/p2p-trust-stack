@@ -43,6 +43,10 @@ import { Libp2pTransport } from '@p2p-trust-stack/core/transport/index.js';
 import type { TspTransport } from '@p2p-trust-stack/core/transport/types.js';
 import { AGENT_PORT_RANGE, AGENT_PORT_RANGE_LABEL } from '@p2p-trust-stack/core/transport/port-range.js';
 import type { DiscoveredPeer } from '@p2p-trust-stack/core/transport/bootstrap-client.js';
+import {
+  buildBootstrapUrls,
+  type BootstrapClientEnv,
+} from '@p2p-trust-stack/core/config/bootstrap-env.js';
 import { RelationshipStore } from '@p2p-trust-stack/core/relationship/store.js';
 import { RelationshipManager } from '@p2p-trust-stack/core/relationship/manager.js';
 import { encodeOobi, decodeOobi, signOobi } from '@p2p-trust-stack/core/relationship/oobi.js';
@@ -118,6 +122,8 @@ import { TspClientModule } from './modules/tsp-client.js';
 import { TspBridge } from './modules/tsp-bridge.js';
 import { RecoveryModule } from './modules/recovery.js';
 import type { NetworkProfile } from '@p2p-trust-stack/core/platform/network-detect.js';
+import { getLocalLanIps } from '@p2p-trust-stack/core/platform/network-detect.js';
+import { dialCandidateAddrs, makeAddressSorter } from '@p2p-trust-stack/core/transport/dial-candidates.js';
 import {
   deriveConnectivityStatus,
   describeConnectivityFailure,
@@ -233,8 +239,21 @@ export abstract class BaseAgent implements AgentHandle {
   protected readonly port: number;
   protected readonly registry: AgentRegistry;
   protected readonly bootstrapUrl: string | undefined;
-  /** Network/group (namespace) this agent joins, e.g. 'p2pts'. */
-  protected readonly net: string;
+  /**
+   * The bootstrap server this agent dials — host + peer ID (no seed; the agent is
+   * a client). Supplied by the composition root; `undefined` means "use this
+   * component's `.env`", and if that has nothing either the agent runs in
+   * LAN-only mode.
+   */
+  protected readonly bootstrapEnv?: BootstrapClientEnv;
+  /**
+   * The VTN key (namespace) this agent is using, e.g. 'p2pts'.
+   *
+   * `undefined` until a VTN is chosen — there is deliberately NO default, so an
+   * agent that has not picked one sends no `net` rather than claiming another
+   * network's key. Set through `setNet()`, which re-registers.
+   */
+  protected net: string | undefined;
 
   protected identity!: LocalIdentity;
   protected meta!: AgentMeta;
@@ -252,6 +271,14 @@ export abstract class BaseAgent implements AgentHandle {
 
   /** Shared database — opened in start(), closed in stop(). */
   protected db?: AgentDatabase;
+
+  /**
+   * A cached `DataSource` view over `db`'s file (see the `ds` getter).
+   *
+   * Held so the getter does not open a NEW connection on every access — which is what
+   * it used to do, leaking one handle per call. Released in `stop()`.
+   */
+  private dbView?: SqliteDataSource;
 
   // ── Modules (Phase 3-5) ───────────────────────────────────────────────────
   protected connectivityModule = new ConnectivityModule();
@@ -280,6 +307,16 @@ export abstract class BaseAgent implements AgentHandle {
   /** Backoff step counter for reconnects. Reset on success; never terminal. */
   private serverReconnectAttempt = 0;
   private serverReconnectTimer?: ReturnType<typeof setTimeout>;
+  /**
+   * True while `reconnectToUtilityServer()` is actually running.
+   *
+   * `serverReconnectTimer` is cleared the instant the timer FIRES, so it is not
+   * a truthful "a reconnect is happening" signal for the whole attempt (which can
+   * take tens of seconds of dialing). Without this flag the connectivity layer
+   * flapped back to `unreachable` mid-attempt and told the user the change "could
+   * not be re-established" while it was still being re-established.
+   */
+  private serverReconnectInFlight = false;
   /** True while a relay-grant refresh (pre-emptive re-dial) is running. */
   private relayRefreshInFlight = false;
   /** Re-entrancy guard so ticks cannot overlap. */
@@ -347,11 +384,17 @@ export abstract class BaseAgent implements AgentHandle {
     this.passphrase = config.passphrase;
     this.port = config.port ?? 0;
     this.registry = registry;
-    this.bootstrapUrl = config.bootstrapUrl;
-    // Default the network/group until the first-run setup wizard supplies the
-    // VTN the agent is joining. 'p2pts' matches the namespace used during
-    // utility-server setup.
-    this.net = config.net ?? 'p2pts';
+    this.bootstrapEnv = config.bootstrapEnv;
+    // Record WHERE this agent registers, for AgentMeta. An explicit
+    // `bootstrapEnv` (the startup screen's boxes) is the real target, so derive
+    // the URL from it; `bootstrapUrl` stays for a caller that supplies the string
+    // directly.
+    this.bootstrapUrl = config.bootstrapUrl
+      ?? (config.bootstrapEnv ? buildBootstrapUrls(config.bootstrapEnv).tcpUrl : undefined);
+    // The VTN key the agent identifies itself by. There is NO default: an agent
+    // that has not chosen a VTN yet sends no `net` at all, rather than claiming
+    // another network's key. The login screen's VTN picker sets it via setNet().
+    this.net = config.net;
     this.didMethod = config.didMethod ?? this.createDefaultDidMethod();
   }
 
@@ -442,22 +485,28 @@ export abstract class BaseAgent implements AgentHandle {
 
     // 3. Store keys in the private keystore database (separate DB file).
     const keystore = new SqliteKeyStore(this.registry.getKeystorePath(this.name));
-    await keystore.storeKeyPairAsync(vid, 'ed25519', crypto.signingKeyPair, this.passphrase);
-    await keystore.storeKeyPairAsync(vid, 'x25519', crypto.agreementKeyPair, this.passphrase);
-    // Post-quantum roots of trust (H4): the DID document ALREADY publishes these
-    // as #key-mldsa / #key-kem, so storing them is what makes the agent's runtime
-    // identity match the identity it advertises. Without this the pair existed in
-    // the document and nowhere else: `loadIdentity()` logged "no ML-DSA-65 key"
-    // for a brand-new agent, OOBI introductions could not be signed, and
-    // confidential traffic could never use the hybrid KEM.
-    if (crypto.mlDsa65KeyPair) {
-      await keystore.storeKeyPairAsync(vid, 'ml_dsa_65', crypto.mlDsa65KeyPair, this.passphrase);
+    // `finally`: a failed write used to leave the keystore handle open, and on Windows an
+    // open handle makes the agent's directory undeletable — so a create that threw could
+    // not be cleaned up. `loadIdentity()` carries the same guard for the same reason.
+    try {
+      await keystore.storeKeyPairAsync(vid, 'ed25519', crypto.signingKeyPair, this.passphrase);
+      await keystore.storeKeyPairAsync(vid, 'x25519', crypto.agreementKeyPair, this.passphrase);
+      // Post-quantum roots of trust (H4): the DID document ALREADY publishes these
+      // as #key-mldsa / #key-kem, so storing them is what makes the agent's runtime
+      // identity match the identity it advertises. Without this the pair existed in
+      // the document and nowhere else: `loadIdentity()` logged "no ML-DSA-65 key"
+      // for a brand-new agent, OOBI introductions could not be signed, and
+      // confidential traffic could never use the hybrid KEM.
+      if (crypto.mlDsa65KeyPair) {
+        await keystore.storeKeyPairAsync(vid, 'ml_dsa_65', crypto.mlDsa65KeyPair, this.passphrase);
+      }
+      if (crypto.hybridKemKeyPair) {
+        await keystore.storeKeyPairAsync(vid, 'mlkem768_x25519', crypto.hybridKemKeyPair, this.passphrase);
+      }
+      await this.storeMethodSpecificKeys(keystore, crypto);
+    } finally {
+      keystore.close();
     }
-    if (crypto.hybridKemKeyPair) {
-      await keystore.storeKeyPairAsync(vid, 'mlkem768_x25519', crypto.hybridKemKeyPair, this.passphrase);
-    }
-    await this.storeMethodSpecificKeys(keystore, crypto);
-    keystore.close();
 
     // Phase 2: Push public identity to utility server via TSP for distributed storage.
     // Private keys NEVER leave the device — only the DID, DID document, and
@@ -478,40 +527,47 @@ export abstract class BaseAgent implements AgentHandle {
    */
   protected async loadIdentity(): Promise<void> {
     const keystore = new SqliteKeyStore(this.registry.getKeystorePath(this.name));
-    const signingKeyPair = await keystore.retrieveKeyPairAsync(this.meta.vid, 'ed25519', this.passphrase);
-    const agreementKeyPair = await keystore.retrieveKeyPairAsync(this.meta.vid, 'x25519', this.passphrase);
+    // `finally`, not a close at the end: a WRONG PASSPHRASE throws on the very first read
+    // below, so the handle used to be left open on exactly the path a user hits most — and
+    // on Windows an open handle makes the agent's directory undeletable (`EBUSY`), which is
+    // what failed `npm test` on the wrong-passphrase case.
+    try {
+      const signingKeyPair = await keystore.retrieveKeyPairAsync(this.meta.vid, 'ed25519', this.passphrase);
+      const agreementKeyPair = await keystore.retrieveKeyPairAsync(this.meta.vid, 'x25519', this.passphrase);
 
-    // Post-quantum roots of trust. ABSENT for identities created before PQ
-    // provisioning: the keystore simply has no such key, which is reported (not an
-    // error) — such an identity can still form relationships and exchange
-    // confidential traffic classically, it just cannot ML-DSA-sign its rotations.
-    const mlDsa65KeyPair = await this.tryLoadKeyPair(keystore, this.meta.vid, 'ml_dsa_65');
-    const hybridKemKeyPair = await this.tryLoadKeyPair(keystore, this.meta.vid, 'mlkem768_x25519');
-    if (!mlDsa65KeyPair) {
-      logger.warn(
-        `[Agent] identity ${this.meta.vid.slice(0, 12)}... has no ML-DSA-65 key — ` +
-        `PQ root-of-trust signing is unavailable for it (no OOBI introduction signature, ` +
-        `no rotation signature, classical-only confidential traffic). Either the identity was ` +
-        `created before PQ keys were persisted, or it was provisioned through a path that did ` +
-        `not store them; re-create it to provision one.`,
-      );
+      // Post-quantum roots of trust. ABSENT for identities created before PQ
+      // provisioning: the keystore simply has no such key, which is reported (not an
+      // error) — such an identity can still form relationships and exchange
+      // confidential traffic classically, it just cannot ML-DSA-sign its rotations.
+      const mlDsa65KeyPair = await this.tryLoadKeyPair(keystore, this.meta.vid, 'ml_dsa_65');
+      const hybridKemKeyPair = await this.tryLoadKeyPair(keystore, this.meta.vid, 'mlkem768_x25519');
+      if (!mlDsa65KeyPair) {
+        logger.warn(
+          `[Agent] identity ${this.meta.vid.slice(0, 12)}... has no ML-DSA-65 key — ` +
+          `PQ root-of-trust signing is unavailable for it (no OOBI introduction signature, ` +
+          `no rotation signature, classical-only confidential traffic). Either the identity was ` +
+          `created before PQ keys were persisted, or it was provisioned through a path that did ` +
+          `not store them; re-create it to provision one.`,
+        );
+      }
+
+      const didDocument = this.didMethod.resolve(this.meta.did);
+      didDocument.id = this.meta.did;
+
+      this.identity = {
+        cesrVid: this.meta.vid,
+        did: this.meta.did,
+        didDocument,
+        signingKeyPair,
+        agreementKeyPair,
+        mlDsa65KeyPair,
+        hybridKemKeyPair,
+      };
+
+      await this.loadMethodSpecificState(keystore);
+    } finally {
+      keystore.close();
     }
-
-    const didDocument = this.didMethod.resolve(this.meta.did);
-    didDocument.id = this.meta.did;
-
-    this.identity = {
-      cesrVid: this.meta.vid,
-      did: this.meta.did,
-      didDocument,
-      signingKeyPair,
-      agreementKeyPair,
-      mlDsa65KeyPair,
-      hybridKemKeyPair,
-    };
-
-    await this.loadMethodSpecificState(keystore);
-    keystore.close();
   }
 
   /**
@@ -1005,9 +1061,13 @@ export abstract class BaseAgent implements AgentHandle {
       multiaddrs: this.getMultiaddrs(),
       onStatus,
       // Bootstrap-facing designation: the configured user name (available from
-      // first contact, before name registration) and the network/group.
+      // first contact, before name registration) and the VTN key in use.
       agentName: this.name,
       net: this.net,
+      // The bootstrap server this agent dials (host + peer ID) — from the startup
+      // screen / `P2PTS_HOME/config.yaml`. Absent means "use this component's
+      // `.env`", and if that has nothing either, LAN-only mode.
+      bootstrapEnv: this.bootstrapEnv,
       // Flag this peer as a TEST peer when a test runner is driving us (Node's
       // `--test` sets NODE_TEST_CONTEXT) or when explicitly opted in via
       // P2PTS_TEST_PEER=1. Test agents are killed without a clean disconnect, so
@@ -1207,6 +1267,7 @@ export abstract class BaseAgent implements AgentHandle {
 
     this.serverReconnectTimer = setTimeout(() => {
       this.serverReconnectTimer = undefined;
+      this.serverReconnectInFlight = true;
       this.reconnectToUtilityServer()
         .then(() => {
           this.serverReconnectAttempt = 0;
@@ -1219,6 +1280,9 @@ export abstract class BaseAgent implements AgentHandle {
           );
           // Keep trying forever with a capped backoff.
           this.scheduleServerReconnect();
+        })
+        .finally(() => {
+          this.serverReconnectInFlight = false;
         });
     }, delayMs);
   }
@@ -1269,10 +1333,21 @@ export abstract class BaseAgent implements AgentHandle {
       `to ${us.peerId.slice(0, 12)}... (${us.multiaddrs.length} addr(s))`,
     );
 
+    // Same ordered candidate list the explicit join and the recovery ladder use.
+    // It adds the relay address(es), which `us.multiaddrs` never contains — the
+    // utility server filters `/p2p-circuit` out of what it advertises. Building
+    // this OOBI from `us.multiaddrs` alone is what made this recovery path fail
+    // in exactly the same way as the first join: identical LAN-only address list,
+    // identical dead end.
+    const dialCandidates = this.connectivityModule.dialCandidatesFor({
+      peerId: us.peerId,
+      multiaddrs: us.multiaddrs,
+      peerRelayAddr: us.relayAddr,
+    });
     const oobi = encodeOobi({
       cesrVid,
       peerId: us.peerId,
-      multiaddrs: us.multiaddrs,
+      multiaddrs: dialCandidateAddrs(dialCandidates),
       did: us.did!,
     });
     await this.configureUtilityServer({ utilityServerOobi: oobi });
@@ -1380,13 +1455,23 @@ export abstract class BaseAgent implements AgentHandle {
       await this.refreshExpiringRelayConnections();
 
       // ── 3. Utility-server connection ──────────────────────────────────
-      if (this.tspBridge.getUtilityServerDid() && !this.tspBridge.isConnected()) {
-        // Only when no reconnect is already pending — the peer:disconnect
-        // handler owns the fast path; this is the safety net.
-        if (!this.serverReconnectTimer) {
-          logger.info('[Agent] supervisor: utility-server bridge is down — reconnecting');
-          this.scheduleServerReconnect();
-        }
+      // Arm whenever a server has been CONFIGURED — not only when it is
+      // configured AND down.
+      //
+      // WHY: `tspBridge.getUtilityServerDid()` is only set once the TSP
+      // handshake has SUCCEEDED. A first join that failed (the cross-network
+      // case: LAN address unroutable, NAT address dead, relay never tried) left
+      // it null, so this branch was a permanent no-op and the agent sat in
+      // `layer: 'unreachable'` forever while the UI promised "it will be sent
+      // automatically once the connection is back" — a promise nothing was
+      // working to keep. `utilityServerOobi` is set by
+      // `configureUtilityServer()`, so it is the right "the user asked for this
+      // server" signal; the reconnect then walks
+      // `establishUtilityServerFromDiscovery()` → the ordered ladder.
+      const serverConfigured = !!this.tspBridge.getUtilityServerDid() || !!this.utilityServerOobi;
+      if (serverConfigured && !this.tspBridge.isConnected() && !this.serverReconnectTimer) {
+        logger.info('[Agent] supervisor: utility-server bridge is down — reconnecting');
+        this.scheduleServerReconnect();
       }
     } catch (err) {
       this.lastConnectivityError = (err as Error)?.message ?? String(err);
@@ -1503,7 +1588,8 @@ export abstract class BaseAgent implements AgentHandle {
         this.tspBridge.isConnected() && !!this.tspBridge.getUtilityServerDid(),
       relay,
       hasRelayReservation: relay.hasReservation || this.connectivityModule.hasRelayReservation(),
-      reconnecting: this.connectivityTickInFlight || !!this.serverReconnectTimer,
+      reconnecting:
+        this.connectivityTickInFlight || this.serverReconnectInFlight || !!this.serverReconnectTimer,
       consecutiveFailures: this.serverReconnectAttempt,
       lastError: this.lastConnectivityError,
     });
@@ -1528,6 +1614,34 @@ export abstract class BaseAgent implements AgentHandle {
 
   getDiscoveredPeers(): DiscoveredPeer[] {
     return this.connectivityModule.getDiscoveredPeers();
+  }
+
+  /** The VTN key this agent identifies itself by (undefined until one is chosen). */
+  getNet(): string | undefined {
+    return this.net;
+  }
+
+  /**
+   * Adopt a VTN: record the key and re-register with the bootstrap so this agent
+   * is identified by the network it is actually using.
+   *
+   * Called from the login flow once the user has picked a VTN from the discovered
+   * list. A no-op when the key is unchanged, so accepting the already-current VTN
+   * does not churn the bootstrap connection.
+   */
+  async setNet(net: string, onStatus?: (message: string) => void): Promise<void> {
+    const next = net.trim();
+    if (!next) throw new Error('Agent.setNet: a VTN key is required');
+    if (this.net === next) return;
+    if (!this.libp2pNode) {
+      throw new Error('Agent.setNet: agent not started. Call start() first.');
+    }
+    await this.connectivityModule.setNet(next, {
+      libp2pNode: this.libp2pNode,
+      multiaddrs: this.getMultiaddrs(),
+      onStatus,
+    });
+    this.net = next;
   }
 
   async reRegisterWithBootstrap(onStatus?: (message: string) => void): Promise<void> {
@@ -1674,6 +1788,17 @@ export abstract class BaseAgent implements AgentHandle {
             maxParallelDials: 32,
             dialTimeout: 10_000,
             addressDialTimeout: 6_000,
+            // Order every dial libp2p performs ON ITS OWN — i.e.
+            // `Libp2pTransport.send()`'s `dialProtocol(peerId, …)`, which passes
+            // no explicit address list and therefore relies on the peer store.
+            // libp2p's default sorter ranks a NAT-mapped public IP ahead of the
+            // LAN address and pushes the relay LAST, so a cross-network dial
+            // spent its whole budget on addresses nothing listens on (measured:
+            // [NAT-ip, relay, LAN] for a typical discovered utility server).
+            // Same policy as ConnectivityModule.dialCandidatesFor() — one
+            // implementation, so the explicit ladder and libp2p's own dialer can
+            // never disagree.
+            addressSorter: makeAddressSorter(getLocalLanIps()),
           },
           services: {
             identify: identify(),
@@ -1735,6 +1860,12 @@ export abstract class BaseAgent implements AgentHandle {
     if (this.db) {
       this.db.close();
       this.db = undefined;
+    }
+    // Release the cached view over the same file. Both connections must go, or Windows
+    // refuses to delete the agent's directory (`EBUSY`) while this one is still open.
+    if (this.dbView) {
+      await this.dbView.close();
+      this.dbView = undefined;
     }
     this.store = undefined;
     this.manager = undefined;
@@ -3469,9 +3600,27 @@ export abstract class BaseAgent implements AgentHandle {
     return row.uuid;
   }
 
+  /**
+   * A `DataSource` over this agent's own database, for the services that take one
+   * (`profiles`, the credential factory, the relationship store's app-DB paths).
+   *
+   * **Cached.** This used to be `SqliteDataSource.fromExisting(...)` on every access,
+   * which opened a NEW connection per call and closed none of them — the agent leaked a
+   * file handle for every profile read, claim write and credential-factory call, and
+   * several of those happen during `start()`. That is invisible on POSIX, where an open
+   * file can still be unlinked, but on Windows it makes the database undeletable: an
+   * agent's directory (or a test's temp home) fails to remove with `EBUSY`/`EPERM`
+   * while any handle is still open. One agent owns ONE database, so it gets one handle,
+   * released by `stop()`.
+   *
+   * Still guarded on `db`: the throw is what tells a caller the agent is not started.
+   */
   private get ds(): SqliteDataSource {
     if (!this.db) throw new Error('Agent not started');
-    return SqliteDataSource.fromExisting(this.registry.getDbPath(this.name));
+    if (!this.dbView) {
+      this.dbView = SqliteDataSource.fromExisting(this.registry.getDbPath(this.name));
+    }
+    return this.dbView;
   }
 
   async createProfile(input: { label: string; purpose?: string; visibility?: string }): Promise<ProfileRow> {
@@ -4072,6 +4221,20 @@ export abstract class BaseAgent implements AgentHandle {
 
     this.utilityServerOobi = params.utilityServerOobi;
 
+    // Best-effort pre-dial through the SAME ordered ladder recovery uses, BEFORE
+    // the TSP handshake. Two reasons:
+    //
+    //   1. It establishes a cached connection that the RFI below then REUSES,
+    //      instead of leaving the handshake to libp2p's dial budget (which will
+    //      abandon a peer after `dialTimeout` even with addresses left untried).
+    //   2. It logs which address actually worked. That is the difference between
+    //      "the relay is down" and "the server holds no reservation" in a bug
+    //      report, and it was previously invisible.
+    //
+    // Never fatal: `tspBridge.connect()` below owns the real error, and a
+    // pre-dial that fails for an unrelated reason must not mask it.
+    await this.preDialConfiguredUtilityServer();
+
     // Wire the TSP bridge through the RelationshipManager
     this.tspBridge.init({
       manager: this.manager,
@@ -4117,6 +4280,46 @@ export abstract class BaseAgent implements AgentHandle {
         `[Agent] Failed to connect to utility server: ${(err as Error)?.message ?? err}`,
       );
       throw err;
+    }
+  }
+
+  /**
+   * Walk the ordered dial ladder for the configured utility server, before the
+   * TSP handshake, purely to warm a connection and to LOG which address worked.
+   *
+   * The candidate list is rebuilt from the configured OOBI, which — since the
+   * join path now seeds it via `ConnectivityModule.dialCandidatesFor()` — already
+   * carries the relay addresses. So this is the same policy, applied to the same
+   * list, that `reconnectPeer()` uses on the recovery path.
+   *
+   * Best-effort and silent on failure: `configureUtilityServer()`'s own
+   * `tspBridge.connect()` produces the error the user sees, and it must not be
+   * replaced by a pre-dial failure.
+   */
+  private async preDialConfiguredUtilityServer(): Promise<void> {
+    if (!this.libp2pNode || !this.utilityServerOobi) return;
+    try {
+      const oobi = decodeOobi(this.utilityServerOobi);
+      const candidates = this.connectivityModule.dialCandidatesFor({
+        peerId: oobi.peerId,
+        multiaddrs: oobi.multiaddrs,
+      });
+      const dialled = await this.connectivityModule.dialPeerCandidates({
+        libp2pNode: this.libp2pNode,
+        peerId: oobi.peerId,
+        candidates,
+        onStatus: (message) => logger.info(`[Agent] pre-dial: ${message}`),
+      });
+      if (!dialled) {
+        logger.warn(
+          `[Agent] pre-dial: no reachable address for the utility server ` +
+          `(tried ${candidates.length}: ${dialCandidateAddrs(candidates).join(', ') || 'none'})`,
+        );
+      }
+    } catch (err) {
+      // A malformed OOBI or a transport hiccup is not the caller's problem — the
+      // real connect below reports whatever actually goes wrong.
+      logger.debug(`[Agent] pre-dial skipped: ${(err as Error)?.message ?? err}`);
     }
   }
 

@@ -8,6 +8,7 @@
  * purpose-built (not table rows) are aliased with a note rather than re-declared.
  */
 import type { ConnectivityStatus } from '@p2p-trust-stack/core/transport/relay-health.js';
+import type { ConnectivityFailureKind } from '@p2p-trust-stack/core/transport/relay-health.js';
 import type { DiscoveredPeer } from '@p2p-trust-stack/core/transport/bootstrap-client.js';
 import type { NetworkProfile } from '@p2p-trust-stack/core/platform/network-detect.js';
 
@@ -88,6 +89,60 @@ export interface UtilityServerStatusDto {
   vid: string | null;
 }
 
+/**
+ * A VTN an agent could join, as advertised by a utility server in the bootstrap
+ * peer directory.
+ *
+ * One entry per VTN, not per server: several utility servers can serve the same
+ * network, and the user is choosing a NETWORK. `vtnKey` is what the agent matches
+ * on and registers as its own `net`.
+ */
+export interface VtnOptionDto {
+  /** The VTN key (namespace) — e.g. 'p2pts'. Agents match on this. */
+  vtnKey: string;
+  /** The VTN's human-readable name (e.g. 'Trust Stackers'), when published. */
+  vtnName?: string;
+  /** The utility server's peer ID — what the agent dials. */
+  peerId: string;
+  /** The server's real DID — required for the strict 4-item OOBI. */
+  did: string;
+  /** The server's CESR-encoded Slot-A VID (peer ID as a fallback). */
+  vid: string;
+  /** The server's advertised dial addresses. */
+  multiaddrs: string[];
+  /**
+   * The per-peer relay address the bootstrap built for this server
+   * (`<relay-prefix>/p2p/<peerId>`), when the bootstrap serves a relay.
+   *
+   * This is the ONLY address that can work when the agent is on a different
+   * network from the server, and it is NOT part of `multiaddrs` — the server's
+   * own `buildDialableMultiaddrs()` filters `/p2p-circuit` out of what it
+   * advertises. Dropping it here is what made a first cross-network join
+   * impossible: the join OOBI carried LAN/NAT addresses only.
+   */
+  relayAddr?: string;
+  /**
+   * The bootstrap reports a live circuit-relay reservation for this server, i.e.
+   * a relayed HOP aimed at it will be accepted. Authoritative, unlike
+   * `reachable` (see `reachableScope`).
+   */
+  reachableViaRelay?: boolean;
+  /**
+   * Reachability scope the bootstrap derived from the server's addresses
+   * (`wan|dns|relay|lan|loopback|unknown`).
+   *
+   * Read this instead of `reachable` when the distinction matters: the bootstrap
+   * records the address it OBSERVED the server connect from, which for a NAT'd
+   * server is a mapped public IP:ephemeral-port that nothing listens on — yet it
+   * classifies as `wan`, so `reachable` is true while only the relay works.
+   */
+  reachableScope?: string;
+  /** The bootstrap reports the server as currently reachable. */
+  reachable: boolean;
+  /** The bootstrap reports a live connection to the server. */
+  connected: boolean;
+}
+
 /** Result of pushing this identity's public state to the utility server. */
 export interface PushIdentityDto {
   ok: boolean;
@@ -118,4 +173,26 @@ export interface ConnectionEventDto {
   timestamp: number;
 }
 
-export type { ConnectivityStatus, DiscoveredPeer, NetworkProfile };
+export type { ConnectivityStatus, ConnectivityFailureKind, DiscoveredPeer, NetworkProfile };
+
+/**
+ * The bootstrap client config a startup screen pre-fills its boxes with.
+ *
+ * A CLIENT view: host + peer ID, no seed — only the bootstrap server holds one.
+ */
+export interface BootstrapConfigView {
+  host: string;
+  peerId: string;
+  tcpPort: number;
+  wsPort: number;
+  /** Where the values came from — the persisted override, the `.env`, or nothing. */
+  source: 'config' | 'env' | 'none';
+}
+
+/**
+ * The bootstrap client config an agent dials — host + peer ID, no seed.
+ *
+ * ALIAS: the core loader's own type, so a caller that needs to name it (e.g. to
+ * build an `AgentConfig`) does not have to reach into the core package.
+ */
+export type { BootstrapClientEnv } from '@p2p-trust-stack/core/config/bootstrap-env.js';
